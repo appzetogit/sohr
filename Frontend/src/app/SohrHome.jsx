@@ -128,7 +128,7 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
 
           <motion.h1
             custom={1} initial="hidden" animate="visible" variants={fadeUp}
-            className={`mt-6 text-[22vw] sm:text-[9rem] lg:text-[10rem] font-bold leading-[0.9] tracking-wide ${GOLD_TEXT} drop-shadow-[0_6px_30px_rgba(201,151,59,0.25)]`}
+            className={`mt-6 text-[22vw] sm:text-[8rem] lg:text-[7.5vw] 2xl:text-[9.5rem] font-bold leading-[0.9] tracking-wide ${GOLD_TEXT} drop-shadow-[0_6px_30px_rgba(201,151,59,0.25)]`}
             style={SERIF}
           >
             SOHR
