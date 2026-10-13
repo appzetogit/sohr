@@ -149,12 +149,13 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
           </motion.p>
 
           <motion.div custom={5} initial="hidden" animate="visible" variants={fadeUp} className="mt-9 flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
-            <a
-              href="/food/user"
-              className="group inline-flex items-center justify-center gap-2.5 rounded-full px-8 py-4 text-sm font-semibold text-[#1A1206] bg-gradient-to-b from-[#FBE7A6] via-[#E0B45A] to-[#B8862F] shadow-[0_10px_40px_-10px_rgba(224,180,90,0.7)] hover:brightness-110 transition"
+            <span
+              aria-disabled="true"
+              title="Online ordering is coming soon"
+              className="inline-flex items-center justify-center gap-2.5 rounded-full px-8 py-4 text-sm font-semibold text-[#1A1206] bg-gradient-to-b from-[#FBE7A6] via-[#E0B45A] to-[#B8862F] opacity-60 cursor-not-allowed select-none"
             >
-              Order Now <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </a>
+              Order Now <span className="text-[10px] font-bold uppercase tracking-wider bg-[#1A1206]/15 rounded-full px-2 py-0.5">Coming soon</span>
+            </span>
             <button
               onClick={onAbout}
               className="inline-flex items-center justify-center gap-2.5 rounded-full px-8 py-4 text-sm font-semibold text-[#F3E9D2] border border-[#C9973B]/50 hover:bg-[#C9973B]/10 transition cursor-pointer"
@@ -289,12 +290,13 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
         </div>
 
         <div className="mt-12 text-center">
-          <a
-            href="/food/user"
-            className="group inline-flex items-center justify-center gap-2.5 rounded-full px-9 py-4 text-sm font-semibold text-[#1A1206] bg-gradient-to-b from-[#FBE7A6] via-[#E0B45A] to-[#B8862F] shadow-[0_10px_40px_-10px_rgba(224,180,90,0.7)] hover:brightness-110 transition"
-          >
-            Start your order <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </a>
+          <span
+              aria-disabled="true"
+              title="Online ordering is coming soon"
+              className="inline-flex items-center justify-center gap-2.5 rounded-full px-9 py-4 text-sm font-semibold text-[#1A1206] bg-gradient-to-b from-[#FBE7A6] via-[#E0B45A] to-[#B8862F] opacity-60 cursor-not-allowed select-none"
+            >
+              Start your order <span className="text-[10px] font-bold uppercase tracking-wider bg-[#1A1206]/15 rounded-full px-2 py-0.5">Coming soon</span>
+            </span>
         </div>
       </section>
 
