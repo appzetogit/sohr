@@ -1,0 +1,91 @@
+{
+  "restaurant": {
+    "name": "SOHR by Vyas Ji",
+    "tagline": "Soul of Hungerr Restaurant",
+    "phone": "9305204140",
+    "address": "48, 32, 3B, Tashkent Marg, Civil Lines, Prayagraj, Uttar Pradesh 211001",
+    "city": "Prayagraj",
+    "state": "Uttar Pradesh",
+    "pincode": "211001",
+    "gstPercent": 5,
+    "pureVeg": true,
+    "open24x7": true
+  },
+  "categories": [
+    {
+      "name": "Indian Breads",
+      "items": [
+        ["Tandoori Roti", 49], ["Tandoori Butter Roti", 59], ["Tawa Roti", 49], ["Tawa Butter Roti", 59],
+        ["Plain Naan", 69], ["Butter Naan", 79], ["Lachha Naan", 89], ["Stuffed Naan", 99],
+        ["Garlic Naan", 99], ["Paneer Naan", 129], ["Cheese Garlic Naan", 149], ["Stuffed Cheese Naan", 159],
+        ["Garlic Roti", 59], ["Chilli Roti", 59], ["Chilli Paratha", 79], ["Plain Kulcha", 69],
+        ["Butter Kulcha", 79], ["Stuffed Kulcha", 99], ["Mushroom Stuffed Kulcha", 129], ["Paneer Kulcha", 139],
+        ["Cheese Kulcha", 149], ["Lachha Paratha", 79], ["Missi Roti", 69], ["Missi Pyaz Roti", 79]
+      ]
+    },
+    {
+      "name": "Paneer Specialities",
+      "items": [
+        ["Paneer Butter Masala", 349], ["Kadhai Paneer", 369], ["Paneer Lababdar", 379], ["Paneer Angara", 399],
+        ["Paneer Do Pyaza", 349], ["Shahi Paneer", 389], ["Palak Paneer", 369], ["Matar Paneer", 349],
+        ["Patiala Paneer", 429], ["Amritsari Paneer", 429], ["Paneer Pasanda", 419], ["Paneer Bhurji", 349],
+        ["Methi Malai Paneer", 389]
+      ]
+    },
+    {
+      "name": "Breakfast & Paratha",
+      "items": [
+        ["Poori Sabzi", 219], ["Chole Bhature", 199], ["Chole Chawal", 199], ["Paratha with Sabzi", 99],
+        ["Plain Paratha with Curd", 219], ["Plain Paratha", 69], ["Gobhi Paratha", 99], ["Gobhi Paratha with Curd", 129],
+        ["Mix Paratha", 119], ["Mix Paratha with Curd", 149], ["Pyaz Paratha", 119], ["Pyaz Paratha with Curd", 149],
+        ["Aloo Paratha", 89], ["Aloo Paratha with Curd", 129], ["Aloo Pyaz Paratha", 119], ["Aloo Pyaz Paratha with Curd", 149]
+      ]
+    },
+    {
+      "name": "Vegetarian Main Course",
+      "items": [
+        ["Mix Veg", 259], ["Aloo Jeera", 229], ["Aloo Methi", 239], ["Aloo Matar", 239],
+        ["Aloo Gobhi", 239], ["Dum Aloo", 229], ["Matar Mushroom", 339], ["Mushroom Masala", 369],
+        ["Mushroom Do Pyaza", 339], ["Masala Chaap", 299], ["Chaap Butter Masala", 329], ["Kadhai Chaap", 339],
+        ["Lababdar Chaap", 369], ["Veg Handi", 339], ["Malai Kofta", 359], ["Veg Kofta", 289],
+        ["Veg Angara", 279], ["Chana Masala", 239], ["Rajma Masala", 239]
+      ]
+    },
+    {
+      "name": "Tandoori Starters & Chaap",
+      "items": [
+        ["Malai Chaap", 219], ["Afghani Chaap", 239], ["Tandoori Chaap", 219], ["Paneer Tikka (8 pcs)", 349],
+        ["Afghani Paneer Tikka", 349], ["Malai Paneer Tikka", 329], ["Malai Mushroom Tikka", 349], ["Mushroom Tikka", 329],
+        ["Afghani Mushroom Tikka", 349], ["Hara Bhara Kebab", 299], ["Crispy Corn", 199], ["Chana Chaat", 169],
+        ["Aloo Chaat", 149], ["Peanut Chaat", 169]
+      ]
+    },
+    {
+      "name": "Sandwich, Chinese & Maggi",
+      "items": [
+        ["Veg Grill Sandwich", 119], ["Veg Cheese Sandwich", 149], ["Paneer Veg Sandwich", 159], ["French Fries", 119],
+        ["Chilli Paneer", 329], ["Chilli Mushroom", 329], ["Chilli Potato", 349], ["Honey Chilli Potato", 279],
+        ["Veg Manchurian", 239], ["Veg Noodles", 179], ["Hakka Noodles", 219], ["Garlic Noodles", 189],
+        ["Schezwan Noodles", 199], ["Plain Maggi", 149], ["Masala Maggi", 159], ["Butter Masala Maggi", 179],
+        ["Vegetable Masala Maggi", 199]
+      ]
+    },
+    {
+      "name": "Raita, Pulao & Biryani",
+      "items": [
+        ["Plain Curd", 49], ["Aloo Raita", 99], ["Boondi Raita", 99], ["Mix Raita", 129],
+        ["Kheera Raita", 99], ["Veg Pulao", 199], ["Paneer Pulao", 239], ["Veg Hyderabadi Biryani with Raita", 299],
+        ["Veg Biryani with Raita", 269]
+      ]
+    },
+    {
+      "name": "Dal & Rice",
+      "items": [
+        ["Dal Fry", 199], ["Dal Tadka", 219], ["Dal Makhani", 249], ["Butter Dal Makhani", 269],
+        ["Urad Dal Chana", 239], ["Steam Rice", 169], ["Jeera Rice", 189], ["Masala Rice", 159],
+        ["Fried Rice", 189], ["Paneer Rice", 199], ["Schezwan Rice", 69], ["Curd Rice", 179],
+        ["Dal Khichdi", 199]
+      ]
+    }
+  ]
+}
