@@ -406,10 +406,10 @@ export default function Help() {
                       We'll respond within 24 hours
                     </p>
                     <a
-                      href="mailto:support@switcheats.com"
+                      href="mailto:support@sohr.in"
                       className="text-sm text-primary hover:underline font-medium"
                     >
-                      support@switcheats.com
+                      support@sohr.in
                     </a>
                   </div>
                 </div>

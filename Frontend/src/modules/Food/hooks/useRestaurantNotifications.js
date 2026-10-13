@@ -339,10 +339,10 @@ export const useRestaurantNotifications = () => {
       let suggestedBackendUrl = null;
       
       // Common patterns:
-      // - If frontend is on foods.switcheats.com, backend might be api.foods.switcheats.com or foods.switcheats.com
-      if (frontendHost.includes('foods.switcheats.com')) {
-        suggestedBackendUrl = `${frontendProtocol}//api.foods.switcheats.com/api`;
-      } else if (frontendHost.includes('switcheats.com')) {
+      // - If frontend is on foods.sohr.in, backend might be api.foods.sohr.in or foods.sohr.in
+      if (frontendHost.includes('foods.sohr.in')) {
+        suggestedBackendUrl = `${frontendProtocol}//api.foods.sohr.in/api`;
+      } else if (frontendHost.includes('sohr.in')) {
         suggestedBackendUrl = `${frontendProtocol}//api.${frontendHost}/api`;
       }
       
