@@ -20,7 +20,7 @@ const fadeUp = {
 };
 
 const PROMISES = [
-  { Icon: Leaf, title: "100% Pure Veg", desc: "Only vegetarian food, cooked in a kitchen that never handles anything else." },
+  { Icon: Leaf, title: "100% Pure Veg", desc: "Only vegetarian food on the menu. Always." },
   { Icon: ShieldCheck, title: "Hygienic Kitchen", desc: "Clean, sealed and carefully handled from the stove to your door." },
   { Icon: Soup, title: "Freshly Cooked For You", desc: "Every order is prepared when you place it, never kept waiting." },
   { Icon: Crown, title: "Premium Quality", desc: "Handpicked ingredients and recipes perfected over years." },
