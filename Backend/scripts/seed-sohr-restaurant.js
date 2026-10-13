@@ -23,16 +23,28 @@ const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const LAT = 25.4513;
 const LNG = 81.8341;
 
+// Delivery zone: a 16-point ring of ~15 km around Prayagraj city centre, covering
+// Civil Lines, Naini, Jhunsi, Phaphamau and the Bamrauli airport area.
+const CITY_CENTER = { lat: 25.4358, lng: 81.8463 };
+const ZONE_RADIUS_KM = 15;
+
+function ringAround({ lat, lng }, radiusKm, points = 16) {
+  const dLat = radiusKm / 111.32;
+  const dLng = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180));
+  return Array.from({ length: points }, (_, i) => {
+    const angle = (2 * Math.PI * i) / points;
+    return {
+      latitude: Number((lat + dLat * Math.sin(angle)).toFixed(5)),
+      longitude: Number((lng + dLng * Math.cos(angle)).toFixed(5))
+    };
+  });
+}
+
 const zoneSeed = {
   name: 'Prayagraj',
   zoneName: 'Prayagraj',
   serviceLocation: 'Prayagraj, Uttar Pradesh',
-  coordinates: [
-    { latitude: 25.58, longitude: 81.7 },
-    { latitude: 25.58, longitude: 82.0 },
-    { latitude: 25.33, longitude: 82.0 },
-    { latitude: 25.33, longitude: 81.7 }
-  ]
+  coordinates: ringAround(CITY_CENTER, ZONE_RADIUS_KM)
 };
 
 async function upsertZone() {
