@@ -3,25 +3,16 @@ import { useNavigate, useLocation } from "react-router-dom"
 import { motion, useReducedMotion } from "framer-motion"
 import { adminAPI } from "@food/api"
 import { setAuthData } from "@food/utils/auth"
-import {
-  loadBusinessSettings,
-  applyModulePowerScanning,
-  getModulePowerScanning,
-} from "@food/utils/businessSettings"
+import { loadBusinessSettings } from "@food/utils/businessSettings"
 import { useCompanyName } from "@food/hooks/useCompanyName"
-import { Button } from "@food/components/ui/button"
-import { Input } from "@food/components/ui/input"
-import { Label } from "@food/components/ui/label"
-import AdminAuthHero from "@food/components/admin/auth/AdminAuthHero"
-import { Eye, EyeOff, Shield, Loader2 } from "lucide-react"
+import { Eye, EyeOff, Shield, Loader2, Mail, Lock } from "lucide-react"
 import quickSpicyLogo from "@food/assets/sohr-logo.jpg"
+import { GOLD_TEXT, SohrFonts, Ornament, RotatingSeal } from "@/app/sohrBrand"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
-const THEME = "#FA0272"
-const THEME_RGB = "250,2,114"
 
 export default function AdminLogin() {
   const navigate = useNavigate()
@@ -35,7 +26,6 @@ export default function AdminLogin() {
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [logoUrl, setLogoUrl] = useState(quickSpicyLogo)
-  const [themeColor, setThemeColor] = useState(THEME)
   const submittingRef = useRef(false)
 
   useEffect(() => {
@@ -47,12 +37,9 @@ export default function AdminLogin() {
   }, [location.state?.message, location.pathname])
 
   useEffect(() => {
-    const initBranding = async () => {
+    const applyLogo = async () => {
       try {
         const settings = await loadBusinessSettings()
-        applyModulePowerScanning("user", settings)
-        const { themeColor: color } = getModulePowerScanning("user", settings)
-        setThemeColor(color)
         if (settings?.logo?.url) {
           setLogoUrl(settings.logo.url)
         }
@@ -60,19 +47,9 @@ export default function AdminLogin() {
         debugWarn("Failed to load business settings:", err)
       }
     }
-    initBranding()
-
-    const handleSettingsUpdate = async () => {
-      const settings = await loadBusinessSettings()
-      applyModulePowerScanning("user", settings)
-      const { themeColor: color } = getModulePowerScanning("user", settings)
-      setThemeColor(color)
-      if (settings?.logo?.url) {
-        setLogoUrl(settings.logo.url)
-      }
-    }
-    window.addEventListener("businessSettingsUpdated", handleSettingsUpdate)
-    return () => window.removeEventListener("businessSettingsUpdated", handleSettingsUpdate)
+    applyLogo()
+    window.addEventListener("businessSettingsUpdated", applyLogo)
+    return () => window.removeEventListener("businessSettingsUpdated", applyLogo)
   }, [])
 
   const handleSubmit = async (e) => {
@@ -140,111 +117,91 @@ export default function AdminLogin() {
         transition: { duration: 0.35, ease: "easeOut" },
       }
 
+  const inputClass =
+    "h-12 w-full rounded-xl border border-[#C9973B]/25 bg-white/[0.03] pl-11 pr-4 text-sm text-[#F3E9D2] placeholder:text-[#7D6F55] outline-none transition focus:border-[#E0B45A] focus:bg-white/[0.05] focus:ring-2 focus:ring-[#E0B45A]/20 disabled:opacity-60"
+
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-white">
-      {/* Left — hero */}
-      <div className="hidden h-full lg:block lg:w-1/2">
-        <AdminAuthHero themeColor={themeColor} logoUrl={logoUrl} />
+    <div className="relative flex min-h-[100dvh] overflow-hidden bg-[#0A0806] text-[#F3E9D2]" style={{ fontFamily: "'Poppins', sans-serif" }}>
+      <SohrFonts />
+
+      {/* Left — brand panel */}
+      <div className="relative hidden lg:flex lg:w-1/2 flex-col items-center justify-center overflow-hidden border-r border-[#C9973B]/15 bg-gradient-to-b from-[#120E08] to-[#0A0806] px-12">
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-[700px] w-[700px] -translate-x-1/2 rounded-full bg-[#C9973B]/10 blur-[140px]" />
+        <RotatingSeal className="w-[380px] h-[380px] xl:w-[440px] xl:h-[440px]" />
+        <p className="sohr-hindi relative mt-10 text-center text-2xl text-[#F3E9D2]">
+          व्यास जी के हाथों से बना हुआ <span className={`sohr-serif font-bold ${GOLD_TEXT}`}>Tasty</span> खाना
+        </p>
+        <Ornament className="relative mt-6" />
       </div>
 
       {/* Right — form */}
-      <div className="flex h-full w-full flex-col bg-[#F0F2F5] lg:w-1/2">
-        {/* Mobile brand strip */}
-        <div
-          className="relative shrink-0 overflow-hidden px-6 py-5 lg:hidden"
-          style={{ backgroundColor: "#141018" }}
-        >
-          <div
-            className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full blur-2xl"
-            style={{ backgroundColor: `${themeColor}35` }}
-          />
-          <div className="relative flex items-center gap-2.5">
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-lg"
-              style={{ backgroundColor: `${themeColor}20` }}
-            >
-              <Shield className="h-3.5 w-3.5" style={{ color: themeColor }} aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-[10px] font-medium text-white/50">Admin Portal</p>
-              <p className="text-sm font-semibold text-white">{companyName}</p>
-            </div>
-          </div>
-        </div>
+      <div className="relative flex w-full flex-col lg:w-1/2">
+        <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-[#C9973B]/10 blur-[120px] lg:hidden" />
 
-        <div className="flex flex-1 items-center justify-center overflow-hidden px-5 sm:px-10">
-          <motion.div {...formMotion} className="w-full max-w-[380px]">
+        <div className="relative flex flex-1 items-center justify-center px-4 py-10 sm:px-10">
+          <motion.div {...formMotion} className="w-full max-w-[400px]">
             {/* Header */}
-            <div className="mb-7 text-center lg:text-left">
-              <div className="mb-5 flex justify-center lg:justify-start">
-                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
-                  <img
-                    src={logoUrl}
-                    alt={`${companyName} logo`}
-                    className="h-full w-full scale-[1.65] object-contain"
-                    loading="lazy"
-                    onError={(e) => {
-                      if (e.target.src !== quickSpicyLogo) {
-                        e.target.src = quickSpicyLogo
-                      }
-                    }}
-                  />
-                </div>
+            <div className="mb-8 text-center">
+              <img
+                src={logoUrl}
+                alt={`${companyName} logo`}
+                className="mx-auto h-20 w-20 rounded-full object-cover ring-2 ring-[#C9973B]/60 shadow-[0_10px_40px_-10px_rgba(224,180,90,0.6)]"
+                onError={(e) => {
+                  if (e.target.src !== quickSpicyLogo) {
+                    e.target.src = quickSpicyLogo
+                  }
+                }}
+              />
+              <p className={`sohr-serif mt-5 text-4xl font-bold tracking-wide ${GOLD_TEXT}`}>SOHR</p>
+              <p className="sohr-serif mt-1 text-[10px] tracking-[0.4em] text-[#C9B48A]">BY VYAS JI</p>
+              <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#C9973B]/40 bg-[#C9973B]/10 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-[#E0B45A]">
+                <Shield className="h-3.5 w-3.5" aria-hidden="true" /> Admin Portal
               </div>
-              <h2 className="text-2xl font-bold tracking-tight text-gray-900">Sign in</h2>
-              <p className="mt-1 text-sm text-gray-500">
-                Enter your credentials to access the dashboard
-              </p>
+              <h1 className="sohr-serif mt-5 text-2xl font-semibold text-[#F3E9D2]">Welcome back</h1>
+              <p className="mt-1.5 text-sm text-[#A8987A]">Sign in to manage your kitchen and orders</p>
             </div>
 
             {/* Form card */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.08)] sm:p-7">
-              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <div className="rounded-3xl border border-[#C9973B]/25 bg-gradient-to-b from-[#17120A] to-[#0E0B07] p-6 shadow-[0_30px_80px_-30px_rgba(201,151,59,0.35)] sm:p-8">
+              <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 {successMessage && (
-                  <div
-                    role="status"
-                    className="rounded-xl px-4 py-3 text-sm"
-                    style={{
-                      backgroundColor: `rgba(${THEME_RGB},0.08)`,
-                      color: themeColor,
-                      border: `1px solid rgba(${THEME_RGB},0.15)`,
-                    }}
-                  >
+                  <div role="status" className="rounded-xl border border-[#C9973B]/30 bg-[#C9973B]/10 px-4 py-3 text-sm text-[#FBE7A6]">
                     {successMessage}
                   </div>
                 )}
                 {error && (
-                  <div
-                    role="alert"
-                    className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600"
-                  >
+                  <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                     {error}
                   </div>
                 )}
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                <div className="space-y-2">
+                  <label htmlFor="email" className="text-xs font-medium uppercase tracking-[0.2em] text-[#C9B48A]">
                     Email
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={isLoading}
-                    autoComplete="off"
-                    required
-                    className="h-12 rounded-xl border border-gray-200 bg-white text-gray-900 shadow-sm transition-all placeholder:text-gray-400 focus:border-gray-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-primary-orange/30"
-                  />
+                  </label>
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#C9973B]" aria-hidden="true" />
+                    <input
+                      id="email"
+                      type="email"
+                      placeholder="admin@sohr.in"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={isLoading}
+                      autoComplete="off"
+                      required
+                      className={inputClass}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                <div className="space-y-2">
+                  <label htmlFor="password" className="text-xs font-medium uppercase tracking-[0.2em] text-[#C9B48A]">
                     Password
-                  </Label>
+                  </label>
                   <div className="relative">
-                    <Input
+                    <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#C9973B]" aria-hidden="true" />
+                    <input
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
@@ -253,42 +210,35 @@ export default function AdminLogin() {
                       disabled={isLoading}
                       autoComplete="new-password"
                       required
-                      className="h-12 rounded-xl border border-gray-200 bg-white pr-12 text-gray-900 shadow-sm transition-all placeholder:text-gray-400 focus:border-gray-300 focus:bg-white focus-visible:ring-2 focus-visible:ring-primary-orange/30 [&::-ms-reveal]:hidden [&::-webkit-password-reveal-button]:hidden"
+                      className={`${inputClass} pr-12 [&::-ms-reveal]:hidden [&::-webkit-password-reveal-button]:hidden`}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-gray-400 transition-colors hover:text-gray-600 focus-visible:outline-none"
+                      className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-[#A8987A] transition-colors hover:text-[#FBE7A6] focus-visible:outline-none"
                       disabled={isLoading}
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-0.5">
+                <div className="flex justify-end">
                   <button
                     type="button"
                     onClick={() => navigate("/admin/forgot-password")}
-                    className="cursor-pointer text-sm font-medium transition-colors hover:underline focus-visible:outline-none"
-                    style={{ color: themeColor }}
+                    className="cursor-pointer text-sm font-medium text-[#E0B45A] transition-colors hover:text-[#FBE7A6] hover:underline focus-visible:outline-none"
                     disabled={isLoading}
                   >
                     Forgot password?
                   </button>
                 </div>
 
-                <Button
+                <button
                   type="submit"
-                  variant="ghost"
-                  className="h-12 w-full cursor-pointer rounded-xl border-0 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2"
-                  style={{ backgroundColor: themeColor }}
                   disabled={isLoading}
+                  className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-gradient-to-b from-[#FBE7A6] via-[#E0B45A] to-[#B8862F] text-sm font-semibold text-[#1A1206] shadow-[0_10px_40px_-10px_rgba(224,180,90,0.7)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E0B45A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A0806] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isLoading ? (
                     <>
@@ -298,12 +248,12 @@ export default function AdminLogin() {
                   ) : (
                     "Sign in"
                   )}
-                </Button>
+                </button>
               </form>
             </div>
 
-            <p className="mt-5 text-center text-xs text-gray-400">
-              Protected admin access &middot; {companyName}
+            <p className="mt-6 text-center text-xs text-[#7D6F55]">
+              Protected admin access &middot; SOHR by Vyas Ji
             </p>
           </motion.div>
         </div>
