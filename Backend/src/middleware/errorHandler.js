@@ -32,6 +32,13 @@ const errorHandler = (err, req, res, next) => {
     logger.error(
         `[${requestId}] ${req.method} ${req.originalUrl} ${statusCode} - ${err.name || 'Error'} - ${message}`
     );
+
+    // Raw database errors quote the offending document, customer name and phone
+    // included, so they stay in the log above and the client gets a short message.
+    const isDatabaseError = /^(Mongo|BSON)/.test(String(err.name || ''));
+    if (statusCode >= 500 && isDatabaseError) {
+        message = `Something went wrong while saving. Please try again (ref ${requestId}).`;
+    }
     if (config.nodeEnv === 'development' && err.stack) {
         logger.error(`[${requestId}] ${err.stack}`);
     }

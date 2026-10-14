@@ -71,6 +71,15 @@ const listDocs = (data) => data?.docs || data?.items || data?.data || [];
 
 before(async () => {
   await mongoose.connect(MONGO_URI);
+  // Build every index (2dsphere included) before the first request. Production always
+  // has them; without this a fresh test database can race the API's background index
+  // build and let invalid geo data through, which is exactly how a live bug slipped by.
+  await Promise.all([FoodOrder.init(), FoodRestaurant.init(), FoodDeliveryPartner.init(), FoodAdmin.init()]);
+  const orderIndexes = await FoodOrder.collection.indexes();
+  assert.ok(
+    orderIndexes.some((index) => index.key['deliveryAddress.location'] === '2dsphere'),
+    'the delivery address 2dsphere index must exist before testing',
+  );
 
   await FoodAdmin.create({
     email: adminEmail,
@@ -127,6 +136,8 @@ test('a WhatsApp order can be created and sent straight to a chosen rider', asyn
   state.orderA = orderKey(res.data.order || res.data);
 
   const saved = await FoodOrder.findById(state.orderA).lean();
+  // Typed-in address, no coordinates: must save without a half-built geo point.
+  assert.equal(saved.deliveryAddress.location, undefined);
   assert.equal(saved.dispatch.status, 'assigned');
   assert.equal(saved.dispatch.assignedBy, 'ADMIN');
   assert.equal(String(saved.dispatch.deliveryPartnerId), state.riders.ravi.id);

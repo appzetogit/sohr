@@ -372,6 +372,22 @@ const orderSchema = new mongoose.Schema(
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index({ 'deliveryAddress.location': '2dsphere' });
+
+// The address schema defaults location.type to "Point", so an address saved without
+// coordinates (a WhatsApp order typed in by the admin) would carry { type: "Point" }
+// alone, which the 2dsphere index above rejects with "Can't extract geo keys".
+// A location is only kept when it has a real [lng, lat] pair.
+orderSchema.pre('validate', function dropIncompleteDeliveryLocation(next) {
+    const coords = this.deliveryAddress?.location?.coordinates;
+    const valid =
+        Array.isArray(coords) &&
+        coords.length === 2 &&
+        coords.every((value) => Number.isFinite(Number(value)));
+    if (this.deliveryAddress && !valid) {
+        this.set('deliveryAddress.location', undefined);
+    }
+    next();
+});
 orderSchema.index({ lastRiderLocation: '2dsphere' });
 orderSchema.index({ userId: 1, createdAt: -1 });
 orderSchema.index({ restaurantId: 1, orderStatus: 1, createdAt: -1 });
