@@ -46,8 +46,8 @@ const getServiceAccountFromEnv = () => {
 export const initializeFirebaseRealtime = () => {
     try {
         if (admin.apps.length > 0) {
-            db = admin.database();
             messaging = admin.messaging();
+            db = config.firebaseDatabaseUrl ? admin.database() : null;
             return { db, messaging };
         }
 
@@ -64,10 +64,17 @@ export const initializeFirebaseRealtime = () => {
             databaseURL: databaseURL || undefined
         });
 
-        db = admin.database();
+        // Push notifications only need the service account. The Realtime Database is
+        // optional (live tracking mirror); admin.database() throws without a URL, so it
+        // must not stop messaging from coming up.
         messaging = admin.messaging();
-
-        logger.info('✅ Firebase Realtime Database Initialized Successfully');
+        if (databaseURL) {
+            db = admin.database();
+            logger.info('✅ Firebase initialized (push notifications + Realtime Database)');
+        } else {
+            db = null;
+            logger.info('✅ Firebase initialized (push notifications; no Realtime Database URL set)');
+        }
         return { db, messaging };
     } catch (error) {
         logger.error(`❌ Firebase Initialization Error: ${error.message}`);
