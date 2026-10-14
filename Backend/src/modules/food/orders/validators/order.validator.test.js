@@ -75,3 +75,20 @@ test('assign with no details is valid — nothing to correct is the common case'
     const dto = validateAssignDeliveryDto({ deliveryPartnerId: '507f1f77bcf86cd799439022' });
     assert.equal(dto.orderDetails, undefined);
 });
+
+test('a rider can be picked in the same request, and leaving it out is still valid', () => {
+    const withRider = validateManualOrderDto({
+        ...validManualOrder,
+        deliveryPartnerId: '507f1f77bcf86cd799439012',
+    });
+    assert.equal(withRider.deliveryPartnerId, '507f1f77bcf86cd799439012');
+
+    const withoutRider = validateManualOrderDto(validManualOrder);
+    assert.equal(withoutRider.deliveryPartnerId, undefined);
+});
+
+test('coordinates are optional now that the admin form no longer asks for them', () => {
+    const dto = validateManualOrderDto(validManualOrder);
+    assert.equal(dto.address.latitude, undefined);
+    assert.equal(dto.address.longitude, undefined);
+});

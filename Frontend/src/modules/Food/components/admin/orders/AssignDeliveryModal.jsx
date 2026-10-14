@@ -304,6 +304,11 @@ export default function AssignDeliveryModal({
                           >
                             {partner.isOnline ? "Online" : "Offline"}
                           </span>
+                          {Number(partner.activeOrderCount) > 0 && (
+                            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-700">
+                              On {partner.activeOrderCount} order{Number(partner.activeOrderCount) === 1 ? "" : "s"}
+                            </span>
+                          )}
                           {/* A rider with no push token cannot be woken — dispatch is
                               blind to them, so say it here rather than in the logs. */}
                           {partner.hasPushToken === false && (

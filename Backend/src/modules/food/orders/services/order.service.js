@@ -46,7 +46,6 @@ import * as paymentService from './order-payment.service.js';
 import { findOrCreateUserByPhone } from '../../../../core/users/user.service.js';
 import {
   enqueueOrderEvent,
-  getBusyDeliveryPartnerIds,
   notifyOwnersActionableAlert,
   haversineKm,
   generateFourDigitDeliveryOtp,
@@ -1950,6 +1949,10 @@ export async function resendDeliveryNotificationAdmin(orderId) {
     return dispatchService.resendDeliveryNotificationAdmin(orderId);
 }
 
+export async function getCurrentTripsDelivery(deliveryPartnerId) {
+  return deliveryService.getCurrentTripsDelivery(deliveryPartnerId);
+}
+
 export async function getCurrentTripDelivery(deliveryPartnerId) {
   return deliveryService.getCurrentTripDelivery(deliveryPartnerId);
 }
@@ -2449,12 +2452,9 @@ export async function assignDeliveryPartnerAdmin(orderId, dto, adminId) {
   if (!partner || partner.status !== 'approved')
     throw new ValidationError('Delivery partner not available');
 
-  // A rider already on a trip cannot take a second one — their own accept endpoint
-  // refuses it, so assigning would produce an offer that can never be accepted.
-  const busyPartnerIds = await getBusyDeliveryPartnerIds();
-  if (busyPartnerIds.has(String(deliveryPartnerId))) {
-    throw new ValidationError('That delivery partner is already on an active delivery');
-  }
+  // No "already busy" check here on purpose: an admin may batch several orders onto
+  // one rider, and the rider's accept endpoint allows admin-assigned orders through
+  // even while another trip is in progress.
 
   applyAdminOrderDetails(order, dto?.orderDetails);
 
@@ -2503,6 +2503,19 @@ export async function createManualOrderAdmin(dto, adminId) {
     .select(OFFER_RESTAURANT_FIELDS)
     .lean();
   if (!restaurant) throw new NotFoundError('Restaurant not found');
+
+  // Optional rider chosen in the same form. Checked up front so a bad pick fails the
+  // request instead of leaving behind an order that was created but never assigned.
+  const deliveryPartnerId = String(dto.deliveryPartnerId || '').trim();
+  if (deliveryPartnerId) {
+    if (!mongoose.isValidObjectId(deliveryPartnerId)) {
+      throw new ValidationError('Invalid delivery partner');
+    }
+    const partner = await FoodDeliveryPartner.findById(deliveryPartnerId).select('status').lean();
+    if (!partner || partner.status !== 'approved') {
+      throw new ValidationError('Delivery partner not available');
+    }
+  }
 
   const customerPhone = String(dto.customerPhone).trim();
   const customerName = String(dto.customerName || '').trim();
@@ -2601,6 +2614,10 @@ export async function createManualOrderAdmin(dto, adminId) {
 
   await order.save();
   logger.info(`Manual order ${order.order_id || order._id} created by admin ${adminId}`);
+
+  if (deliveryPartnerId) {
+    return assignDeliveryPartnerAdmin(order._id.toString(), { deliveryPartnerId }, adminId);
+  }
 
   return normalizeOrderForClient(order);
 }

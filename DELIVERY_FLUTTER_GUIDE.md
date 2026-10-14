@@ -269,6 +269,16 @@ On launch, `GET /orders/current` returns `{ activeOrder }`. If one exists, go st
 
 **Notes on an order:** `note` and `deliveryInstructions` are the **customer's delivery instructions**. `cookingNote` is the kitchen note. Don't mix them up.
 
+### Several orders at once (admin batching)
+
+Automatic dispatch gives a rider one order at a time. An **admin can deliberately assign more orders to a rider who is already on a trip**, for example several WhatsApp orders going the same way. The app has to handle that:
+
+- **The offer still arrives mid-trip.** The socket event `new_order` has `assignedByAdmin: true`. Show it even while a trip is running; ignore other offers while busy. You have 45 seconds to accept, after which the order goes back to the admin.
+- **Accepting mid-trip is allowed** for these orders only. `PATCH /orders/:orderId/accept` succeeds for an admin-assigned order; for anything else a busy rider still gets "You already have an active delivery".
+- **`GET /orders/current`** returns `activeOrders` (every accepted, unfinished order, most recently updated first) as well as the old single `activeOrder` (= `activeOrders[0]`). Use `activeOrders`.
+- **`GET /orders/available`** for a busy rider returns their accepted orders plus admin assignments waiting for them.
+- **Suggested UX:** keep one order "in focus" on the map, with the others in a "Next deliveries" list. When one is completed, move focus to the next item in `activeOrders`. Every trip call (`reached-pickup`, `confirm-pickup`, and so on) takes its own `:orderId`, so orders progress independently. Send `update-location` for each order that has been picked up but not delivered.
+
 **Can't finish a trip** (breakdown or accident) **before pickup:** `POST /food/delivery/order-emergency-requests` with `{ "reason": "at least 10 characters" }`.
 
 ---

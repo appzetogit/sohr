@@ -239,7 +239,8 @@ export const useDeliveryNotifications = () => {
    * Returns 'shown' | 'queued' | false.
    */
   const enqueueOffer = useCallback((orderData) => {
-    if (!orderData || isPartnerBusy()) return false;
+    if (!orderData) return false;
+    if (isPartnerBusy() && !orderData.assignedByAdmin) return false;
 
     const key = getOrderAlertKey(orderData);
     if (!key) return false;
@@ -415,7 +416,8 @@ export const useDeliveryNotifications = () => {
   }, []);
 
   const handleIncomingOrderAlert = useCallback((orderData = {}) => {
-    if (isPartnerBusy()) {
+    // Admin-assigned offers may be batched onto a rider who is mid-trip.
+    if (isPartnerBusy() && !orderData?.assignedByAdmin) {
       debugLog('Skipping incoming order alert because partner already has an active trip');
       return;
     }
@@ -922,7 +924,9 @@ export const useDeliveryNotifications = () => {
     });
 
     socketRef.current.on('new_order', (orderData) => {
-      if (isPartnerBusy()) {
+      // Broadcast offers wait until the rider is free; an admin may still batch an
+      // order onto a rider mid-trip, and that one has to reach them.
+      if (isPartnerBusy() && !orderData?.assignedByAdmin) {
         debugLog('Ignoring new_order because partner already has an active trip', {
           orderId: orderData?.orderId || orderData?.orderMongoId || orderData?._id,
         });

@@ -310,8 +310,13 @@ export async function updateOrderStatusDeliveryController(req, res, next) {
 export async function getCurrentTripDeliveryController(req, res, next) {
     try {
         const deliveryPartnerId = req.user?.userId;
-        const order = await orderService.getCurrentTripDelivery(deliveryPartnerId);
-        return sendResponse(res, 200, 'Current trip retrieved', { activeOrder: order });
+        // activeOrder stays for older app builds; activeOrders lists every accepted
+        // order when an admin has batched more than one onto this rider.
+        const activeOrders = await orderService.getCurrentTripsDelivery(deliveryPartnerId);
+        return sendResponse(res, 200, 'Current trip retrieved', {
+            activeOrder: activeOrders[0] || null,
+            activeOrders,
+        });
     } catch (err) {
         next(err);
     }

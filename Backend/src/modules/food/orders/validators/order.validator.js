@@ -238,7 +238,9 @@ export function validateManualOrderDto(body) {
         paymentMethod: manualPaymentMethod.default('cash'),
         riderEarning: z.coerce.number().min(0).optional(),
         note: z.string().optional(),
-        deliveryInstructions: z.string().optional()
+        deliveryInstructions: z.string().optional(),
+        // Optional: assign a rider in the same request (they may already be on a trip).
+        deliveryPartnerId: z.string().optional()
     });
     const result = schema.safeParse(body);
     if (!result.success) {

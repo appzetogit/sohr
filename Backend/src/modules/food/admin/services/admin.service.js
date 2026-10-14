@@ -35,6 +35,8 @@ import { FoodAddon } from '../../restaurant/models/foodAddon.model.js';
 import { FoodSupportTicket } from '../../user/models/supportTicket.model.js';
 import { FoodRestaurantSupportTicket } from '../../restaurant/models/supportTicket.model.js';
 import { FoodOrder } from '../../orders/models/order.model.js';
+import { getActiveOrderCountsByPartner } from '../../orders/services/order.helpers.js';
+import { getRestaurantMenu } from '../../restaurant/services/restaurantMenu.service.js';
 import { isCancelledOrder, CANCELLED_ORDER_STATUSES } from '../../orders/services/order.helpers.js';
 import { FoodTransaction } from '../../orders/models/foodTransaction.model.js';
 import { FoodRestaurantWithdrawal } from '../../restaurant/models/foodRestaurantWithdrawal.model.js';
@@ -2987,9 +2989,14 @@ export async function getRestaurantAnalytics(restaurantId) {
 
 export async function getRestaurantMenuById(id) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-    const doc = await FoodRestaurant.findById(id).select('menu').lean();
-    if (!doc) return null;
-    return doc.menu || { sections: [] };
+    const exists = await FoodRestaurant.exists({ _id: id });
+    if (!exists) return null;
+    // Built from food_items, the menu's single source of truth. The restaurant's own
+    // "menu" field is a legacy snapshot that nothing writes any more, so reading it
+    // returned an empty menu. Unlike the public endpoint this includes items that are
+    // unapproved or unavailable, which the admin still needs to see.
+    const { sections } = await getRestaurantMenu(id);
+    return { sections };
 }
 
 export async function updateRestaurantMenuById(id, menu) {
@@ -4882,7 +4889,10 @@ export async function getDeliveryPartners(query) {
     ]);
 
     const partnerIds = list.map(p => p._id);
-    const statsMap = await getBulkDeliveryPartnerStats(partnerIds);
+    const [statsMap, activeOrderCounts] = await Promise.all([
+        getBulkDeliveryPartnerStats(partnerIds),
+        getActiveOrderCountsByPartner(partnerIds)
+    ]);
 
     const deliveryPartners = list.map((doc, index) => {
         const stats = statsMap.get(doc._id.toString()) || {};
@@ -4920,6 +4930,8 @@ export async function getDeliveryPartners(query) {
             // riders sat unreachable for hours while the list showed them green.
             // Exposed as a field so the panel can say so instead of it being
             // discoverable only from server logs.
+            // Unfinished orders the rider currently holds (admin can batch several).
+            activeOrderCount: activeOrderCounts.get(doc._id.toString()) || 0,
             hasPushToken:
                 (Array.isArray(doc.fcmTokenMobile) && doc.fcmTokenMobile.length > 0) ||
                 (Array.isArray(doc.fcmTokens) && doc.fcmTokens.length > 0),

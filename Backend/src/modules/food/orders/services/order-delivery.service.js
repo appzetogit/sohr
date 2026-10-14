@@ -204,13 +204,17 @@ async function syncRazorpayQrPayment(orderDoc) {
 
 
 
-export async function getCurrentTripDelivery(deliveryPartnerId) {
+/**
+ * Every order the rider has accepted and not yet finished, most recently updated first.
+ * Usually one; more when an admin has batched several orders onto the same rider.
+ */
+export async function getCurrentTripsDelivery(deliveryPartnerId) {
   if (!deliveryPartnerId) {
     throw new ValidationError('Delivery partner ID required');
   }
 
   const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
-  const order = await FoodOrder.findOne({
+  const orders = await FoodOrder.find({
     'dispatch.deliveryPartnerId': partnerId,
     'dispatch.status': 'accepted',
     orderStatus: {
@@ -223,13 +227,23 @@ export async function getCurrentTripDelivery(deliveryPartnerId) {
     .sort({ updatedAt: -1 })
     .lean();
 
-  if (!order) return null;
+  if (!orders.length) return [];
 
-  const tx = await FoodTransaction.findOne({ orderId: order._id })
+  const txRows = await FoodTransaction.find({ orderId: { $in: orders.map((o) => o._id) } })
     .select(DELIVERY_TRANSACTION_SELECT)
     .lean();
+  const txByOrderId = new Map(txRows.map((tx) => [String(tx.orderId), tx]));
 
-  return sanitizeOrderForDeliveryPartner(mergeTransactionIntoOrder(order, tx));
+  return orders.map((order) =>
+    sanitizeOrderForDeliveryPartner(
+      mergeTransactionIntoOrder(order, txByOrderId.get(String(order._id)) || null),
+    ),
+  );
+}
+
+export async function getCurrentTripDelivery(deliveryPartnerId) {
+  const trips = await getCurrentTripsDelivery(deliveryPartnerId);
+  return trips[0] || null;
 }
 
 export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
@@ -237,10 +251,12 @@ export async function listOrdersAvailableDelivery(deliveryPartnerId, query) {
   const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
   const hasActiveDelivery = await partnerHasActiveDelivery(deliveryPartnerId);
 
+  // A rider on a trip sees only their own orders: every accepted one (an admin may have
+  // batched several) plus any admin assignment still waiting for them to accept.
   const filter = hasActiveDelivery
     ? {
         'dispatch.deliveryPartnerId': partnerId,
-        'dispatch.status': 'accepted',
+        'dispatch.status': { $in: ['assigned', 'accepted'] },
         orderStatus: { $nin: TERMINAL_ORDER_STATUSES },
       }
     : {
@@ -435,7 +451,9 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
       .lean();
 
     const activeOrderKey = String(existingActive?._id || '');
-    const requestedOrder = await FoodOrder.findOne(identity).select('_id').lean();
+    const requestedOrder = await FoodOrder.findOne(identity)
+      .select('_id dispatch.status dispatch.deliveryPartnerId dispatch.assignedBy')
+      .lean();
     const requestedOrderKey = String(requestedOrder?._id || '');
 
     if (activeOrderKey && requestedOrderKey && activeOrderKey === requestedOrderKey) {
@@ -443,9 +461,19 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
       return acceptedOrder ? sanitizeOrderForDeliveryPartner(acceptedOrder) : null;
     }
 
-    throw new ValidationError(
-      'You already have an active delivery. Complete it before accepting another order.',
-    );
+    // Auto-dispatch keeps riders to one trip at a time, but an admin may batch several
+    // orders onto the same rider on purpose. Those arrive as an admin assignment to this
+    // exact rider and are allowed through; everything else is still refused.
+    const isAdminBatchedToMe =
+      requestedOrder?.dispatch?.status === 'assigned' &&
+      requestedOrder?.dispatch?.assignedBy === 'ADMIN' &&
+      String(requestedOrder?.dispatch?.deliveryPartnerId || '') === String(deliveryPartnerId);
+
+    if (!isAdminBatchedToMe) {
+      throw new ValidationError(
+        'You already have an active delivery. Complete it before accepting another order.',
+      );
+    }
   }
 
   const statusHistoryEntry = {

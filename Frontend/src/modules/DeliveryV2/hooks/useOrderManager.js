@@ -112,6 +112,31 @@ export const useOrderManager = () => {
   };
 
   /**
+   * Accept an admin-batched order while another trip is in progress. The current trip
+   * stays on screen; the queued one is loaded from /orders/current once it finishes.
+   */
+  const queueOrder = async (order) => {
+    const orderId = canonicalOrderId(order);
+    if (!orderId) {
+      toast.error('Invalid order data');
+      return;
+    }
+
+    try {
+      const response = await deliveryAPI.acceptOrder(orderId);
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.message || 'Order already taken or unavailable');
+      }
+      const label = order?.orderId || order?.order_id || 'Order';
+      toast.success(`${label} accepted. It starts after your current delivery.`);
+    } catch (error) {
+      console.error('Queue Order Error:', error);
+      toast.error(error?.response?.data?.message || error?.message || 'Could not accept the order');
+      throw error;
+    }
+  };
+
+  /**
    * Mark "Reached Pickup" (Arrival at restaurant)
    */
   const reachPickup = async () => {
@@ -218,6 +243,7 @@ export const useOrderManager = () => {
 
   return {
     acceptOrder,
+    queueOrder,
     reachPickup,
     pickUpOrder,
     reachDrop,

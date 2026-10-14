@@ -174,6 +174,31 @@ export async function getBusyDeliveryPartnerIds() {
   return new Set(rows.map((row) => String(row.dispatch.deliveryPartnerId)));
 }
 
+/**
+ * How many unfinished orders each rider is holding (offered to them or accepted).
+ * Lets the admin see who is already busy before batching another order onto them.
+ */
+export async function getActiveOrderCountsByPartner(partnerIds = []) {
+  const ids = partnerIds
+    .map((id) => String(id || ''))
+    .filter((id) => mongoose.isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  if (!ids.length) return new Map();
+
+  const rows = await FoodOrder.aggregate([
+    {
+      $match: {
+        'dispatch.deliveryPartnerId': { $in: ids },
+        'dispatch.status': { $in: ['assigned', 'accepted'] },
+        orderStatus: { $nin: TERMINAL_ORDER_STATUSES },
+      },
+    },
+    { $group: { _id: '$dispatch.deliveryPartnerId', count: { $sum: 1 } } },
+  ]);
+
+  return new Map(rows.map((row) => [String(row._id), row.count]));
+}
+
 export function buildOrderIdentityFilter(orderIdOrMongoId) {
   const raw = String(orderIdOrMongoId || "").trim();
   if (!raw) return null;

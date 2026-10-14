@@ -1361,8 +1361,8 @@ export default function OrdersPage({ statusKey = "all" }) {
   const handleCreateManualOrder = async (body) => {
     try {
       setIsCreatingManualOrder(true)
-      const response = await adminAPI.createManualOrder(body)
-      toast.success(response?.data?.message || "Order created")
+      await adminAPI.createManualOrder(body)
+      toast.success(body?.deliveryPartnerId ? "Order created and sent to the rider" : "Order created")
       setManualOrderOpen(false)
       await fetchOrdersRef.current({ silent: true, withRingCheck: false, force: true })
     } catch (error) {
