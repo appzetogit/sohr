@@ -206,8 +206,11 @@ export const useOrderManager = () => {
   const completeDelivery = async (otp) => {
     const orderId = canonicalOrderId(activeOrder);
     try {
-      // 1. Verify OTP first
-      const verifyRes = await deliveryAPI.verifyDropOtp(orderId, otp);
+      // 1. Verify OTP first (skipped when the handover code is switched off)
+      const otpRequired = activeOrder?.deliveryVerification?.dropOtp?.required !== false;
+      const verifyRes = otpRequired
+        ? await deliveryAPI.verifyDropOtp(orderId, otp)
+        : { data: { success: true, data: { order: activeOrder } } };
       
       if (verifyRes?.data?.success) {
         let finalOrder = verifyRes.data?.data?.order || activeOrder;

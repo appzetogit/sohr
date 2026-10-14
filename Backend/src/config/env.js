@@ -42,6 +42,10 @@ export const config = {
     otpRateLimit: Number(process.env.OTP_RATE_LIMIT || 3),
     otpRateWindow: Number(process.env.OTP_RATE_WINDOW || 600),
     useDefaultOtp: process.env.USE_DEFAULT_OTP === 'true',
+    // Customer handover code the rider must enter at the door. Set
+    // DELIVERY_DROP_OTP_REQUIRED=false to deliver without it (e.g. WhatsApp customers,
+    // who never see the code in an app).
+    deliveryDropOtpRequired: process.env.DELIVERY_DROP_OTP_REQUIRED !== 'false',
 
     // SMS India Hub
     smsIndiaHubUsername: process.env.SMS_INDIA_HUB_USERNAME,

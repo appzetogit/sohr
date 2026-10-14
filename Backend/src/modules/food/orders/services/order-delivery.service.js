@@ -14,6 +14,7 @@ import { buildPaginatedResult, buildPaginationOptions } from '../../../../utils/
 import { logger } from '../../../../utils/logger.js';
 import { getIO, rooms } from '../../../../config/socket.js';
 import { getFirebaseDB } from '../../../../config/firebase.js';
+import { config } from '../../../../config/env.js';
 import { fetchDrivingRoute } from '../utils/googleMaps.js';
 
 import * as foodTransactionService from './foodTransaction.service.js';
@@ -918,19 +919,29 @@ export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImag
     billImageUrl,
   };
 
-  // Pre-generate handover OTP so user can see it as soon as food is on the way
-  const existingOtp = String(order.deliveryOtp || '').trim();
-  if (!existingOtp) {
-    order.deliveryOtp = generateFourDigitDeliveryOtp();
+  if (config.deliveryDropOtpRequired) {
+    // Pre-generate handover OTP so user can see it as soon as food is on the way
+    const existingOtp = String(order.deliveryOtp || '').trim();
+    if (!existingOtp) {
+      order.deliveryOtp = generateFourDigitDeliveryOtp();
+      order.deliveryVerification = {
+        ...(order.deliveryVerification?.toObject?.() ||
+          order.deliveryVerification ||
+          {}),
+        dropOtp: { required: true, verified: false },
+      };
+    }
+
+    emitDeliveryDropOtpToUser(order, String(order.deliveryOtp || "").trim());
+  } else {
+    // Handover code switched off: nothing to generate or show the customer.
     order.deliveryVerification = {
       ...(order.deliveryVerification?.toObject?.() ||
         order.deliveryVerification ||
         {}),
-      dropOtp: { required: true, verified: false },
+      dropOtp: { required: false, verified: false },
     };
   }
-
-  emitDeliveryDropOtpToUser(order, String(order.deliveryOtp || "").trim());
 
   pushStatusHistory(order, {
     byRole: 'DELIVERY_PARTNER',
@@ -980,16 +991,18 @@ export async function confirmReachedDropDelivery(orderId, deliveryPartnerId) {
   // Never regenerate an OTP the customer may already be displaying. It is issued at
   // pickup (getDropOtpUser exposes it from 'picked_up' onwards), so re-rolling it here
   // invalidated the code the customer reads out — the rider then got "Invalid OTP".
+  const otpRequired = config.deliveryDropOtpRequired;
   const existingOtp = String(order.deliveryOtp || '').trim();
-  if (!existingOtp) {
+  if (otpRequired && !existingOtp) {
     order.deliveryOtp = generateFourDigitDeliveryOtp();
   }
-  // Arm the OTP gate at drop regardless (early-return above covers already-verified).
+  // Arm the OTP gate at drop (early-return above covers already-verified), unless the
+  // handover code is switched off for this install.
   order.deliveryVerification = {
     ...(order.deliveryVerification?.toObject?.() ||
       order.deliveryVerification ||
       {}),
-    dropOtp: { required: true, verified: false },
+    dropOtp: { required: otpRequired, verified: false },
   };
 
   order.deliveryState = {
@@ -1034,6 +1047,11 @@ export async function verifyDropOtpDelivery(orderId, deliveryPartnerId, otp) {
   }
 
   if (order.deliveryVerification?.dropOtp?.verified) {
+    return { order: sanitizeOrderForDeliveryPartner(order) };
+  }
+
+  // Handover code switched off: apps that still call this step just move on.
+  if (!config.deliveryDropOtpRequired && !order.deliveryVerification?.dropOtp?.required) {
     return { order: sanitizeOrderForDeliveryPartner(order) };
   }
 

@@ -467,7 +467,10 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
 };
 
 export const DeliveryVerificationModal = ({ order, onComplete, onClose }) => {
-  const alreadyVerified = !!order?.deliveryVerification?.dropOtp?.verified;
+  // No handover code when the server switched it off for this order.
+  const alreadyVerified =
+    !!order?.deliveryVerification?.dropOtp?.verified ||
+    order?.deliveryVerification?.dropOtp?.required === false;
   const paymentMethod = (
     order?.paymentMethod ||
     order?.payment?.method ||

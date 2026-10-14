@@ -255,7 +255,7 @@ All paths below are under `/food/delivery`. `:orderId` accepts the display id (`
 | At restaurant | `PATCH /orders/:orderId/reached-pickup` | |
 | Picked up | `PATCH /orders/:orderId/confirm-pickup` | Optional body `{ "billImageUrl": "…" }` |
 | At customer | `PATCH /orders/:orderId/reached-drop` | |
-| Customer OTP | `POST /orders/:orderId/verify-drop-otp` | Body `{ "otp": "1234" }`. The customer reads it out; it is **never** in any response to you |
+| Customer OTP | `POST /orders/:orderId/verify-drop-otp` | **Only if `deliveryVerification.dropOtp.required` is `true`.** Body `{ "otp": "1234" }`; the customer reads it out and it is never in any response to you. **SOHR currently has this switched off** (`required: false`): skip the code screen and call `complete` directly |
 | Collect payment (COD) | section 8 | Only if the order isn't prepaid |
 | Done | `PATCH /orders/:orderId/complete` | Then `leave-tracking` |
 
@@ -335,7 +335,7 @@ The server's Firebase service account **isn't configured yet**, so pushes won't 
 3. **Check `status` on every launch.** An admin can deactivate a rider at any time.
 4. **Image paths are relative.** Pass them through `Env.fileUrl()`.
 5. **Deposit verify uses snake_case** Razorpay keys. Other payment calls in the platform use camelCase.
-6. **The drop OTP is never sent to you.** Only the customer has it.
+6. **Check `deliveryVerification.dropOtp.required` on every order** before showing a handover-code screen. It is currently `false` for SOHR, so no code is needed at the door. When it is `true`, the code is never sent to you; only the customer has it.
 7. **Reconnect the socket after a token refresh.**
 8. **Poll as well as using the socket**, for offers and the active trip.
 
@@ -344,6 +344,6 @@ The server's Firebase service account **isn't configured yet**, so pushes won't 
 - [ ] Register a rider in the app, approve them at `https://sohr.in/admin`, then log in with OTP `1234`.
 - [ ] Go online from inside Prayagraj (or a mocked GPS location there). Outside the zone, no orders arrive.
 - [ ] Place an order from the customer app for SOHR by Vyas Ji, have the restaurant accept it, and check the offer reaches the rider.
-- [ ] Walk the whole trip flow, including drop OTP and cash collection.
+- [ ] Walk the whole trip flow, including cash collection. The handover code is currently off, so `complete` works without it.
 - [ ] Kill and reopen the app mid-trip. It should resume the active trip.
 - [ ] Turn airplane mode on and off mid-trip. The socket should reconnect and the location stream resume.

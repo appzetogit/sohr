@@ -23,6 +23,8 @@ import { FoodOrder } from '../../src/modules/food/orders/models/order.model.js';
 const API = process.env.E2E_API;
 const MONGO_URI = process.env.MONGO_URI;
 const DEFAULT_OTP = '1234';
+// Must match the API instance under test (DELIVERY_DROP_OTP_REQUIRED on the server).
+const DROP_OTP_REQUIRED = process.env.E2E_DROP_OTP_REQUIRED !== 'false';
 
 if (!API || !MONGO_URI) throw new Error('Set E2E_API and MONGO_URI');
 const dbName = new URL(MONGO_URI).pathname.replace(/^\//, '');
@@ -260,9 +262,27 @@ test('finishing one batched order leaves the others on the rider', async () => {
     assert.equal(res.status, 200, `${path}: ${JSON.stringify(res.json)}`);
   }
 
-  const { deliveryOtp } = await FoodOrder.findById(id).select('+deliveryOtp').lean();
-  const otp = await call('POST', `/food/delivery/orders/${id}/verify-drop-otp`, { token, body: { otp: deliveryOtp } });
-  assert.equal(otp.status, 200, `verify-drop-otp: ${JSON.stringify(otp.json)}`);
+  const saved = await FoodOrder.findById(id).select('+deliveryOtp').lean();
+
+  if (DROP_OTP_REQUIRED) {
+    assert.equal(saved.deliveryVerification.dropOtp.required, true);
+    assert.match(saved.deliveryOtp, /^\d{4}$/);
+
+    // Without the customer's code the delivery cannot be completed...
+    const blocked = await call('PATCH', `/food/delivery/orders/${id}/complete`, { token, body: {} });
+    assert.equal(blocked.status, 400, `complete without code: ${JSON.stringify(blocked.json)}`);
+
+    // ...and with it, it can.
+    const otp = await call('POST', `/food/delivery/orders/${id}/verify-drop-otp`, { token, body: { otp: saved.deliveryOtp } });
+    assert.equal(otp.status, 200, `verify-drop-otp: ${JSON.stringify(otp.json)}`);
+  } else {
+    // Handover code switched off: none is generated, and old app builds that still
+    // call verify-drop-otp (with no code) are let through.
+    assert.equal(saved.deliveryVerification.dropOtp.required, false);
+    assert.ok(!saved.deliveryOtp, 'no handover code should be generated');
+    const otp = await call('POST', `/food/delivery/orders/${id}/verify-drop-otp`, { token, body: {} });
+    assert.equal(otp.status, 200, `verify-drop-otp no-op: ${JSON.stringify(otp.json)}`);
+  }
 
   const done = await call('PATCH', `/food/delivery/orders/${id}/complete`, { token, body: {} });
   assert.equal(done.status, 200, `complete: ${JSON.stringify(done.json)}`);
@@ -278,4 +298,12 @@ test('the admin menu lists the real menu items for order-item suggestions', asyn
   const items = res.data.menu.sections.flatMap((section) => section.items || []);
   assert.ok(items.length > 0, 'menu must not be empty');
   assert.ok(items.every((item) => item.name && Number.isFinite(Number(item.price))));
+});
+
+test('rider apps are told up front whether a handover code will be needed', async () => {
+  const res = await call('GET', '/food/delivery/orders/current', { token: state.riders.ravi.token });
+  assert.equal(res.status, 200, JSON.stringify(res.json));
+  for (const order of res.data.activeOrders) {
+    assert.equal(order.deliveryVerification.dropOtp.required, DROP_OTP_REQUIRED);
+  }
 });

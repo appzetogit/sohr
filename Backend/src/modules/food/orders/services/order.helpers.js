@@ -9,6 +9,7 @@ import {
 } from "../../../../core/notifications/firebase.service.js";
 import { getIO, rooms } from '../../../../config/socket.js';
 import { addOrderJob } from '../../../../queues/producers/order.producer.js';
+import { config } from '../../../../config/env.js';
 
 export function enqueueOrderEvent(action, payload = {}) {
   try {
@@ -61,6 +62,14 @@ export function sanitizeOrderForExternal(orderDoc) {
 
 export function sanitizeOrderForDeliveryPartner(orderDoc) {
   const o = sanitizeOrderForExternal(orderDoc);
+  // The gate is only stored at pickup, so before that tell the rider app up front
+  // whether a handover code will be needed (it decides whether to show the code screen).
+  if (o.deliveryVerification?.dropOtp == null) {
+    o.deliveryVerification = {
+      ...(o.deliveryVerification || {}),
+      dropOtp: { required: config.deliveryDropOtpRequired, verified: false },
+    };
+  }
   const cookingNote = String(o.note || "").trim();
   const deliveryInstructions = String(o.deliveryInstructions || "").trim();
   return {

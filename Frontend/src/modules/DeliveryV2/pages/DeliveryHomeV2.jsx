@@ -1079,7 +1079,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                               <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
                               <CheckCircle2 className="w-[20px] h-[20px] relative z-10 drop-shadow-md" /> 
-                              <span className="relative z-10 drop-shadow-md">VERIFY & COMPLETE</span>
+                              <span className="relative z-10 drop-shadow-md">
+                                {activeOrder?.deliveryVerification?.dropOtp?.required === false ? 'MARK AS DELIVERED' : 'VERIFY & COMPLETE'}
+                              </span>
                             </button>
                          </motion.div>
                       </div>
