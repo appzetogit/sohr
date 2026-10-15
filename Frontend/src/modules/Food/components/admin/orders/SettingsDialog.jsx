@@ -11,7 +11,6 @@ export default function SettingsDialog({ isOpen, onOpenChange, visibleColumns, t
     si: "Serial Number",
     orderId: "Order ID",
     orderDate: "Order Date",
-    orderOtp: "Order OTP",
     customer: "Customer Information",
     restaurant: "Restaurant",
     foodItems: "Food Items",

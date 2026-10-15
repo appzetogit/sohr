@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Eye, MapPin, Package, User, Phone, Mail, Calendar, Clock, Truck, CreditCard, X, Receipt, CheckCircle2, History, Banknote } from "lucide-react"
+import { Eye, MapPin, Package, User, Phone, Mail, Calendar, Clock, Truck, CreditCard, X, Receipt, History, Banknote } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -200,15 +200,6 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
                 </p>
                 <p className="text-sm font-medium text-slate-900">{order.date}{order.time ? `, ${order.time}` : ""}</p>
               </div>
-              {order.orderOtp && (
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider flex items-center gap-2 font-bold">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Handover Code (OTP)
-                  </p>
-                  <p className="text-lg font-bold text-slate-950 tracking-[0.2em]">{order.orderOtp}</p>
-                </div>
-              )}
               {order.estimatedDeliveryTime && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">

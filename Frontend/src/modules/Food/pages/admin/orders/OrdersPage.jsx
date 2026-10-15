@@ -740,7 +740,6 @@ export default function OrdersPage({ statusKey = "all" }) {
         deliveryPartnerName,
         deliveryPartnerPhone,
         deliveryType: order.deliveryType || "Home Delivery",
-        orderOtp: order.deliveryOtp,
         address: order.address || order.customerAddress || order.deliveryAddress,
         refundStatus: order.payment?.refund?.status || (order.payment?.status === 'refunded' ? 'processed' : null)
       }
@@ -1428,7 +1427,6 @@ export default function OrdersPage({ statusKey = "all" }) {
           si: "Serial Number",
           orderId: "Order ID",
           orderDate: "Order Date",
-          orderOtp: "Order OTP",
           customer: "Customer Information",
           restaurant: "Restaurant",
           foodItems: "Food Items",
