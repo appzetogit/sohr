@@ -283,6 +283,53 @@ Automatic dispatch gives a rider one order at a time. An **admin can deliberatel
 
 ---
 
+### No handover OTP at the door (current SOHR setting)
+
+SOHR has the customer handover code **switched off**. The rider does not ask the customer for an OTP; they just mark the order delivered. The server says so on every order:
+
+```json
+"deliveryVerification": { "dropOtp": { "required": false, "verified": false } }
+```
+
+What to change in the app:
+
+1. **Read the flag; don't hard-code it.** Treat a missing value as `true`, so the app keeps working if the code is ever switched back on.
+2. **When `required == false`:** don't show the OTP entry screen and don't call `verify-drop-otp`. At the customer, show one **"Mark as delivered"** button.
+3. **Cash orders still collect payment first** (section 8), then complete.
+4. **Complete** with `PATCH /food/delivery/orders/:orderId/complete` and body `{}`. No `otp` field is needed.
+5. Remove any "Ask customer for OTP" text, OTP push or notification handling, and OTP fields in the order details UI.
+
+```dart
+bool dropOtpRequired(Map<String, dynamic> order) {
+  final dropOtp = order['deliveryVerification']?['dropOtp'];
+  return dropOtp?['required'] != false; // missing => required (safe default)
+}
+
+Future<void> finishDelivery(Map<String, dynamic> order, {String? otp}) async {
+  final id = order['_id'] ?? order['orderMongoId'];
+  final dio = ApiClient.instance.dio;
+
+  if (dropOtpRequired(order)) {
+    // Only when the code is switched back on.
+    await dio.post('/food/delivery/orders/$id/verify-drop-otp', data: {'otp': otp});
+  }
+  await dio.patch('/food/delivery/orders/$id/complete', data: {});
+}
+
+// At the drop screen:
+Widget dropActions(Map<String, dynamic> order) {
+  if (!dropOtpRequired(order)) {
+    return ElevatedButton(
+      onPressed: () => collectPaymentIfCodThen(order, () => finishDelivery(order)),
+      child: const Text('Mark as delivered'),
+    );
+  }
+  return OtpEntryWidget(onSubmit: (otp) => finishDelivery(order, otp: otp));
+}
+```
+
+Older app builds that still call `verify-drop-otp` won't break: the server answers 200 and lets them through. Ship the change anyway, so riders aren't shown a code screen they can't complete.
+
 ## 8. Cash on delivery
 
 1. Show a QR: `POST /orders/:orderId/collect/qr` returns `{ shortUrl, imageUrl, amount, expiresAt }`. Render `shortUrl` as a QR code.
