@@ -19,6 +19,7 @@ import { FoodAdmin } from '../../src/core/admin/admin.model.js';
 import { FoodDeliveryPartner } from '../../src/modules/food/delivery/models/deliveryPartner.model.js';
 import { FoodRestaurant } from '../../src/modules/food/restaurant/models/restaurant.model.js';
 import { FoodOrder } from '../../src/modules/food/orders/models/order.model.js';
+import { FoodItem } from '../../src/modules/food/admin/models/food.model.js';
 
 const API = process.env.E2E_API;
 const MONGO_URI = process.env.MONGO_URI;
@@ -59,7 +60,7 @@ async function riderLogin(phone) {
 
 const manualOrder = (overrides = {}) => ({
   restaurantId: String(state.restaurantId),
-  customerName: 'E2E Customer',
+  customerName: 'Test Customer',
   customerPhone: `9${String(Date.now()).slice(-9)}`,
   address: { street: '12 Test Street, Civil Lines', city: 'Prayagraj', state: 'Uttar Pradesh', zipCode: '211001' },
   items: '1x Paneer Tikka (8 pcs), 2x Butter Naan',
@@ -305,5 +306,66 @@ test('rider apps are told up front whether a handover code will be needed', asyn
   assert.equal(res.status, 200, JSON.stringify(res.json));
   for (const order of res.data.activeOrders) {
     assert.equal(order.deliveryVerification.dropOtp.required, DROP_OTP_REQUIRED);
+  }
+});
+
+test('itemised WhatsApp orders keep one line per dish, priced from the menu', async () => {
+  const [kulcha, naan] = await FoodItem.find({ restaurantId: state.restaurantId }).limit(2).lean();
+  const res = await call('POST', '/food/admin/orders/manual', {
+    token: state.adminToken,
+    body: manualOrder({
+      items: undefined,
+      lineItems: [
+        // Wrong name/price on purpose: the server must use the menu's own values.
+        { itemId: String(kulcha._id), name: 'tampered', quantity: 2, price: 1 },
+        { itemId: String(naan._id), name: naan.name, quantity: 3, price: naan.price },
+        { name: 'Extra green chutney', quantity: 1, price: 20 },
+      ],
+      amount: 2 * kulcha.price + 3 * naan.price + 20 - 10, // agreed ₹10 discount
+    }),
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.json));
+  const saved = await FoodOrder.findById(orderKey(res.data.order)).lean();
+
+  assert.deepEqual(
+    saved.items.map((i) => [i.name, i.quantity, i.price]),
+    [
+      [kulcha.name, 2, kulcha.price],
+      [naan.name, 3, naan.price],
+      ['Extra green chutney', 1, 20],
+    ],
+  );
+  assert.equal(saved.items[0].itemId, String(kulcha._id));
+  assert.equal(saved.items[2].itemId, 'custom');
+  const itemsTotal = 2 * kulcha.price + 3 * naan.price + 20;
+  assert.equal(saved.pricing.subtotal, itemsTotal);
+  assert.equal(saved.pricing.discount, 10);
+  assert.equal(saved.pricing.total, itemsTotal - 10);
+});
+
+test('a dish that is not on this restaurant menu is refused', async () => {
+  const before = await FoodOrder.countDocuments();
+  const res = await call('POST', '/food/admin/orders/manual', {
+    token: state.adminToken,
+    body: manualOrder({
+      items: undefined,
+      lineItems: [{ itemId: new mongoose.Types.ObjectId().toString(), name: 'Ghost dish', quantity: 1, price: 50 }],
+    }),
+  });
+  assert.equal(res.status, 400, JSON.stringify(res.json));
+  assert.match(res.json.message, /not on this restaurant/i);
+  assert.equal(await FoodOrder.countDocuments(), before);
+});
+
+test('bad customer details are refused with a clear message', async () => {
+  for (const [patch, pattern] of [
+    [{ customerPhone: '2929392939292929239' }, /10-digit/],
+    [{ customerName: 'fgdsuigui1' }, /letters/],
+    [{ amount: 0 }, /more than 0/],
+    [{ address: { street: '12 Test Street', city: 'Prayagraj', state: 'Uttar Pradesh', zipCode: '34235' } }, /6 digits/],
+  ]) {
+    const res = await call('POST', '/food/admin/orders/manual', { token: state.adminToken, body: manualOrder(patch) });
+    assert.equal(res.status, 400, JSON.stringify(res.json));
+    assert.match(res.json.message, pattern);
   }
 });

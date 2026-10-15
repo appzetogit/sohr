@@ -92,3 +92,72 @@ test('coordinates are optional now that the admin form no longer asks for them',
     assert.equal(dto.address.latitude, undefined);
     assert.equal(dto.address.longitude, undefined);
 });
+
+test('phone numbers are normalised to 10 digits and junk is refused', async () => {
+    const { normalizeIndianMobile } = await import('./order.validator.js');
+    for (const input of ['9876543210', '+91 98765 43210', '91-9876543210', '09876543210', '(987) 654-3210']) {
+        assert.equal(normalizeIndianMobile(input), '9876543210', input);
+    }
+    for (const input of ['12345', '5876543210', '98765432101', 'abcdefghij', '', '2929392939292929']) {
+        assert.equal(normalizeIndianMobile(input), null, input);
+    }
+    const dto = validateManualOrderDto({ ...validManualOrder, customerPhone: '+91 98765 43210' });
+    assert.equal(dto.customerPhone, '9876543210');
+    assert.throws(() => validateManualOrderDto({ ...validManualOrder, customerPhone: '2929392939292929' }), /10-digit/);
+});
+
+test('names, cities and states must be real words, pin code must be 6 digits', () => {
+    assert.throws(() => validateManualOrderDto({ ...validManualOrder, customerName: 'A' }), /at least 2/);
+    assert.throws(() => validateManualOrderDto({ ...validManualOrder, customerName: 'Om123' }), /letters/);
+    assert.throws(
+        () => validateManualOrderDto({ ...validManualOrder, address: { ...validManualOrder.address, city: '411001' } }),
+        /City/,
+    );
+    assert.throws(
+        () => validateManualOrderDto({ ...validManualOrder, address: { ...validManualOrder.address, street: 'abc' } }),
+        /at least 5/,
+    );
+    assert.throws(
+        () => validateManualOrderDto({ ...validManualOrder, address: { ...validManualOrder.address, zipCode: '34235' } }),
+        /6 digits/,
+    );
+    // Hindi and accented names are fine; extra spaces are collapsed.
+    const dto = validateManualOrderDto({
+        ...validManualOrder,
+        customerName: '  व्यास   जी ',
+        address: { ...validManualOrder.address, zipCode: '211001' },
+    });
+    assert.equal(dto.customerName, 'व्यास जी');
+});
+
+test('itemised lines are accepted and checked line by line', () => {
+    const lines = [
+        { itemId: '507f1f77bcf86cd799439013', name: 'Stuffed Kulcha', quantity: 2, price: 99 },
+        { name: 'Extra chutney', quantity: '1', price: '20' },
+    ];
+    const dto = validateManualOrderDto({ ...validManualOrder, items: undefined, lineItems: lines });
+    assert.equal(dto.lineItems.length, 2);
+    assert.equal(dto.lineItems[1].quantity, 1);
+
+    const bad = (line, pattern) =>
+        assert.throws(() => validateManualOrderDto({ ...validManualOrder, lineItems: [line] }), pattern);
+    bad({ name: 'Naan', quantity: 0, price: 79 }, /at least 1/);
+    bad({ name: 'Naan', quantity: 100, price: 79 }, /at most 99/);
+    bad({ name: 'Naan', quantity: 1.5, price: 79 }, /whole number/);
+    bad({ name: 'Naan', quantity: 1, price: -5 }, /negative/);
+    bad({ itemId: 'not-an-id', name: 'Naan', quantity: 1, price: 79 }, /menu item/);
+});
+
+test('an order needs items and a positive amount', () => {
+    const noItems = { ...validManualOrder };
+    delete noItems.items;
+    assert.throws(() => validateManualOrderDto(noItems), /items required/i);
+    assert.throws(() => validateManualOrderDto({ ...validManualOrder, items: undefined, lineItems: [] }), /at least one item/);
+    assert.throws(() => validateManualOrderDto({ ...validManualOrder, amount: 0 }), /more than 0/);
+});
+
+test('0091 / 091 prefixes are understood too', async () => {
+    const { normalizeIndianMobile } = await import('./order.validator.js');
+    assert.equal(normalizeIndianMobile('091-9876543210'), '9876543210');
+    assert.equal(normalizeIndianMobile('0091 98765 43210'), '9876543210');
+});

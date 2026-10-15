@@ -2497,6 +2497,52 @@ export async function assignDeliveryPartnerAdmin(orderId, dto, adminId) {
  * marked assignedBy ADMIN so auto-dispatch never broadcasts it — it waits for the
  * admin to pick a rider.
  */
+/**
+ * Order lines for a WhatsApp order.
+ *
+ * Menu items (with itemId) are re-read from the restaurant's own menu so the saved
+ * name, price and veg flag always match it; an id from another restaurant or a deleted
+ * item is refused. Custom lines keep the name and price the admin typed. The older
+ * free-text `items` form still works and becomes a single line at the agreed total.
+ */
+async function buildManualOrderItems(dto, restaurantId, amount) {
+  const lines = Array.isArray(dto.lineItems) ? dto.lineItems : [];
+  if (!lines.length) {
+    return [{ itemId: 'manual', name: String(dto.items || '').trim(), price: amount, quantity: 1 }];
+  }
+
+  const menuIds = [...new Set(lines.filter((l) => l.itemId).map((l) => String(l.itemId)))];
+  const menuItems = menuIds.length
+    ? await FoodItem.find({ _id: { $in: menuIds }, restaurantId })
+        .select('name price foodType image')
+        .lean()
+    : [];
+  const byId = new Map(menuItems.map((item) => [String(item._id), item]));
+  const missing = menuIds.filter((id) => !byId.has(id));
+  if (missing.length) {
+    throw new ValidationError('Some items are not on this restaurant\'s menu any more. Remove them and try again.');
+  }
+
+  return lines.map((line) => {
+    const menuItem = line.itemId ? byId.get(String(line.itemId)) : null;
+    return menuItem
+      ? {
+          itemId: String(menuItem._id),
+          name: menuItem.name,
+          price: Number(menuItem.price) || 0,
+          quantity: line.quantity,
+          isVeg: menuItem.foodType !== 'Non-Veg',
+          image: menuItem.image || '',
+        }
+      : {
+          itemId: 'custom',
+          name: line.name,
+          price: Number(line.price) || 0,
+          quantity: line.quantity,
+        };
+  });
+}
+
 export async function createManualOrderAdmin(dto, adminId) {
   const restaurantId = toObjectId(dto.restaurantId, 'Restaurant ID');
   const restaurant = await FoodRestaurant.findById(restaurantId)
@@ -2537,8 +2583,15 @@ export async function createManualOrderAdmin(dto, adminId) {
 
   const amount = Math.round(Number(dto.amount) * 100) / 100;
   const method = String(dto.paymentMethod || 'cash');
+  const orderItems = await buildManualOrderItems(dto, restaurantId, amount);
+  const itemsTotal =
+    Math.round(orderItems.reduce((sum, line) => sum + line.price * line.quantity, 0) * 100) / 100;
+  // The admin agrees the final total with the customer: below the item total is a
+  // discount, above it is a delivery charge. Either way pricing still adds up.
   const pricing = {
-    subtotal: amount,
+    subtotal: itemsTotal,
+    discount: itemsTotal > amount ? Math.round((itemsTotal - amount) * 100) / 100 : 0,
+    deliveryFee: amount > itemsTotal ? Math.round((amount - itemsTotal) * 100) / 100 : 0,
     total: amount,
     currency: 'INR',
     distanceKm: null,
@@ -2576,16 +2629,7 @@ export async function createManualOrderAdmin(dto, adminId) {
     userId: user._id,
     restaurantId,
     zoneId: restaurant.zoneId || undefined,
-    // One line item: a WhatsApp order is agreed as a description and a total, not an
-    // itemised cart. Everything downstream only needs items to be non-empty.
-    items: [
-      {
-        itemId: 'manual',
-        name: String(dto.items).trim(),
-        price: amount,
-        quantity: 1,
-      },
-    ],
+    items: orderItems,
     deliveryAddress,
     customerName,
     customerPhone,

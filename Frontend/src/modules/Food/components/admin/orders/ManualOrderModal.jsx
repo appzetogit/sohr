@@ -10,6 +10,7 @@ import {
 } from "@food/components/ui/dialog"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
+import { FIELD_ORDER, validateManualOrder, normalizeIndianMobile } from "./manualOrderValidation"
 
 const PAYMENT_METHODS = [
   { value: "cash", label: "Cash on delivery" },
@@ -35,15 +36,28 @@ const emptyForm = {
 const SELECT_CLASS =
   "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 
-function Field({ label, children, hint, className = "" }) {
+function Field({ label, children, hint, error, name, required = false, className = "" }) {
   return (
-    <label className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">{label}</span>
+    <label data-field={name} className={`flex flex-col gap-1.5 ${className}`}>
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+        {label}
+        {required && <span className="ml-0.5 text-red-500">*</span>}
+      </span>
       {children}
-      {hint && <span className="text-[11px] text-slate-500">{hint}</span>}
+      {error ? (
+        <span role="alert" className="text-xs font-medium text-red-600">
+          {error}
+        </span>
+      ) : (
+        hint && <span className="text-[11px] text-slate-500">{hint}</span>
+      )}
     </label>
   )
 }
+
+/** Input classes with the red error state. */
+const inputClass = (error, extra = "") =>
+  `h-10 ${extra} ${error ? "border-red-400 bg-red-50/40 focus-visible:border-red-500 focus-visible:ring-red-200" : ""}`
 
 function Section({ title, children }) {
   return (
@@ -68,7 +82,9 @@ const flattenMenu = (payload) => {
 }
 
 /** Type-ahead over the restaurant's menu; picked items go into a quantity list. */
-function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
+const MAX_QTY = 99
+
+function OrderItemsPicker({ menu, menuLoading, cart, setCart, errors = {} }) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
@@ -90,7 +106,9 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
     setCart((prev) => {
       const existing = prev.find((line) => line.key === item.key)
       if (existing) {
-        return prev.map((line) => (line.key === item.key ? { ...line, qty: line.qty + 1 } : line))
+        return prev.map((line) =>
+          line.key === item.key ? { ...line, qty: Math.min(line.qty + 1, MAX_QTY) } : line,
+        )
       }
       return [...prev, { ...item, qty: 1 }]
     })
@@ -103,15 +121,24 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
     const name = query.trim()
     if (!name) return
     const match = suggestions[highlight]
-    if (match) return addItem({ key: match.id, name: match.name, price: match.price })
-    addItem({ key: `custom:${name.toLowerCase()}`, name, price: null })
+    if (match) return addItem({ key: match.id, itemId: match.id, name: match.name, price: match.price })
+    addItem({ key: `custom:${name.toLowerCase()}`, name: name.slice(0, 120), price: null, custom: true })
   }
 
   const changeQty = (key, delta) =>
     setCart((prev) =>
       prev
-        .map((line) => (line.key === key ? { ...line, qty: line.qty + delta } : line))
+        .map((line) =>
+          line.key === key ? { ...line, qty: Math.min(line.qty + delta, MAX_QTY) } : line,
+        )
         .filter((line) => line.qty > 0),
+    )
+
+  const setCustomPrice = (key, value) =>
+    setCart((prev) =>
+      prev.map((line) =>
+        line.key === key ? { ...line, price: value === "" ? null : Math.max(0, Number(value)) } : line,
+      ),
     )
 
   const handleKeyDown = (event) => {
@@ -163,7 +190,7 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
                 aria-selected={index === highlight}
                 onMouseDown={(e) => {
                   e.preventDefault()
-                  addItem({ key: item.id, name: item.name, price: item.price })
+                  addItem({ key: item.id, itemId: item.id, name: item.name, price: item.price })
                 }}
                 onMouseEnter={() => setHighlight(index)}
                 className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm ${
@@ -183,7 +210,12 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
             <li
               onMouseDown={(e) => {
                 e.preventDefault()
-                addItem({ key: `custom:${query.trim().toLowerCase()}`, name: query.trim(), price: null })
+                addItem({
+                  key: `custom:${query.trim().toLowerCase()}`,
+                  name: query.trim().slice(0, 120),
+                  price: null,
+                  custom: true,
+                })
               }}
               className="cursor-pointer border-t border-slate-100 px-3 py-2 text-xs text-slate-500 hover:bg-slate-50"
             >
@@ -194,10 +226,40 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
       </div>
 
       {cart.length > 0 ? (
-        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
-          {cart.map((line) => (
-            <li key={line.key} className="flex items-center gap-3 px-3 py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-900">{line.name}</span>
+        <ul
+          className={`divide-y divide-slate-100 rounded-lg border ${
+            errors.items ? "border-red-300" : "border-slate-200"
+          }`}
+        >
+          {cart.map((line) => {
+            const lineError = errors[`item:${line.key}`]
+            return (
+            <li key={line.key} className={`px-3 py-2 text-sm ${lineError ? "bg-red-50/60" : ""}`}>
+             <div className="flex items-center gap-3">
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-900">
+                {line.name}
+                {line.custom && (
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                    Custom
+                  </span>
+                )}
+              </span>
+              {line.custom && (
+                <div className="relative w-24">
+                  <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">₹</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    inputMode="decimal"
+                    value={line.price ?? ""}
+                    onChange={(e) => setCustomPrice(line.key, e.target.value)}
+                    placeholder="Price"
+                    aria-label={`Price of ${line.name}`}
+                    aria-invalid={Boolean(lineError)}
+                    className={`h-8 pl-5 text-sm ${lineError ? "border-red-400" : ""}`}
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -211,7 +273,8 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
                 <button
                   type="button"
                   onClick={() => changeQty(line.key, 1)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  disabled={line.qty >= MAX_QTY}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label={`Add one ${line.name}`}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -220,12 +283,28 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart }) {
               <span className="w-16 text-right tabular-nums text-slate-700">
                 {line.price == null ? "—" : `₹${line.price * line.qty}`}
               </span>
+             </div>
+             {lineError && (
+               <p role="alert" className="mt-1 text-xs font-medium text-red-600">
+                 {lineError}
+               </p>
+             )}
             </li>
-          ))}
+            )
+          })}
         </ul>
       ) : (
-        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">
+        <p
+          className={`rounded-lg border border-dashed px-3 py-4 text-center text-xs ${
+            errors.items ? "border-red-300 text-red-600" : "border-slate-200 text-slate-500"
+          }`}
+        >
           No items yet. Search the menu above and press Enter or click a suggestion.
+        </p>
+      )}
+      {errors.items && cart.length > 0 && (
+        <p role="alert" className="text-xs font-medium text-red-600">
+          {errors.items}
         </p>
       )}
     </div>
@@ -341,7 +420,10 @@ export default function ManualOrderModal({
   const [partners, setPartners] = useState([])
   const [partnersLoading, setPartnersLoading] = useState(false)
   const [deliveryPartnerId, setDeliveryPartnerId] = useState("")
-  const [error, setError] = useState("")
+  const [errors, setErrors] = useState({})
+  // Errors are shown once the admin has tried to submit, then kept live as they fix them.
+  const [attempted, setAttempted] = useState(false)
+  const bodyRef = useRef(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -353,7 +435,8 @@ export default function ManualOrderModal({
     setCart([])
     setAmountTouched(false)
     setDeliveryPartnerId("")
-    setError("")
+    setErrors({})
+    setAttempted(false)
   }, [isOpen, restaurantOptions])
 
   useEffect(() => {
@@ -400,34 +483,67 @@ export default function ManualOrderModal({
     if (!amountTouched) setForm((prev) => ({ ...prev, amount: cart.length ? String(cartTotal) : "" }))
   }, [cartTotal, cart.length, amountTouched])
 
-  const setField = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))
+  const setField = (key, sanitize) => (event) => {
+    const value = sanitize ? sanitize(event.target.value) : event.target.value
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  // Phone: digits, + and separators only. Pin code: 6 digits only.
+  const phoneInput = (v) => v.replace(/[^\d+\s-]/g, "").slice(0, 16)
+  const pinInput = (v) => v.replace(/\D/g, "").slice(0, 6)
+
+  useEffect(() => {
+    if (attempted) setErrors(validateManualOrder(form, cart))
+  }, [attempted, form, cart])
+
+  const amountHint = (() => {
+    if (!amountTouched) return "Calculated from the items, edit if needed"
+    const diff = Math.round((Number(form.amount) - cartTotal) * 100) / 100
+    if (!Number.isFinite(diff) || diff === 0) return "Matches the item total"
+    return diff < 0 ? `₹${-diff} discount on the item total (₹${cartTotal})` : `₹${diff} above the item total, saved as a delivery charge`
+  })()
+
+  const errorCount = Object.keys(errors).filter((key) => !key.startsWith("item:")).length
+
+  const scrollToFirstError = (found) => {
+    const first = FIELD_ORDER.find((key) => found[key])
+    const el = first && bodyRef.current?.querySelector(`[data-field="${first}"]`)
+    if (!el) return
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    el.querySelector("input, select, textarea")?.focus({ preventScroll: true })
+  }
 
   const handleSubmit = () => {
-    if (!form.restaurantId) return setError("Pick the restaurant the rider collects from")
-    if (!form.customerName.trim()) return setError("Customer name is required")
-    if (!form.customerPhone.trim()) return setError("Customer phone is required")
-    if (!form.street.trim()) return setError("Delivery address is required")
-    if (!form.city.trim()) return setError("City is required")
-    if (!form.state.trim()) return setError("State is required")
-    if (!cart.length) return setError("Add at least one item to the order")
-    if (form.amount === "" || Number(form.amount) < 0) return setError("Order amount is required")
+    const found = validateManualOrder(form, cart)
+    setAttempted(true)
+    setErrors(found)
+    if (Object.keys(found).length) {
+      scrollToFirstError(found)
+      return
+    }
 
-    setError("")
+    const clean = (v) => String(v ?? "").trim().replace(/\s+/g, " ")
     onCreate({
       restaurantId: form.restaurantId,
-      customerName: form.customerName.trim(),
-      customerPhone: form.customerPhone.trim(),
+      customerName: clean(form.customerName),
+      customerPhone: normalizeIndianMobile(form.customerPhone),
       address: {
-        street: form.street.trim(),
-        city: form.city.trim(),
-        state: form.state.trim(),
-        zipCode: form.zipCode.trim(),
+        street: clean(form.street),
+        city: clean(form.city),
+        state: clean(form.state),
+        zipCode: clean(form.zipCode),
       },
-      items: cart.map((line) => `${line.qty}x ${line.name}`).join(", "),
+      // One line per dish, so the order shows "2x Butter Naan" properly everywhere.
+      lineItems: cart.map((line) => ({
+        ...(line.itemId ? { itemId: line.itemId } : {}),
+        name: line.name,
+        quantity: line.qty,
+        price: Number(line.price) || 0,
+      })),
       amount: Number(form.amount),
       paymentMethod: form.paymentMethod,
       ...(form.riderEarning === "" ? {} : { riderEarning: Number(form.riderEarning) }),
-      deliveryInstructions: form.deliveryInstructions.trim(),
+      deliveryInstructions: clean(form.deliveryInstructions),
       ...(deliveryPartnerId ? { deliveryPartnerId } : {}),
     })
   }
@@ -446,11 +562,22 @@ export default function ManualOrderModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div ref={bodyRef} className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
           {restaurantOptions.length !== 1 && (
             <Section title="Restaurant">
-              <Field label="Pickup restaurant" className="sm:col-span-2">
-                <select value={form.restaurantId} onChange={setField("restaurantId")} className={SELECT_CLASS}>
+              <Field
+                label="Pickup restaurant"
+                name="restaurantId"
+                required
+                error={errors.restaurantId}
+                className="sm:col-span-2"
+              >
+                <select
+                  value={form.restaurantId}
+                  onChange={setField("restaurantId")}
+                  aria-invalid={Boolean(errors.restaurantId)}
+                  className={`${SELECT_CLASS} ${errors.restaurantId ? "border-red-400" : ""}`}
+                >
                   <option value="">Select a restaurant…</option>
                   {restaurantOptions.map((restaurant) => (
                     <option key={restaurant.id} value={restaurant.id}>
@@ -463,54 +590,109 @@ export default function ManualOrderModal({
           )}
 
           <Section title="Customer">
-            <Field label="Name">
-              <Input value={form.customerName} onChange={setField("customerName")} className="h-10" />
+            <Field label="Name" name="customerName" required error={errors.customerName}>
+              <Input
+                value={form.customerName}
+                onChange={setField("customerName")}
+                maxLength={80}
+                autoComplete="off"
+                placeholder="e.g. Rahul Sharma"
+                aria-invalid={Boolean(errors.customerName)}
+                className={inputClass(errors.customerName)}
+              />
             </Field>
-            <Field label="Phone" hint="Used to identify the customer and to call them">
+            <Field
+              label="Phone"
+              name="customerPhone"
+              required
+              error={errors.customerPhone}
+              hint="10-digit mobile, used to identify and call the customer"
+            >
               <Input
                 type="tel"
                 inputMode="tel"
                 value={form.customerPhone}
-                onChange={setField("customerPhone")}
-                className="h-10"
+                onChange={setField("customerPhone", phoneInput)}
+                autoComplete="off"
+                placeholder="98765 43210"
+                aria-invalid={Boolean(errors.customerPhone)}
+                className={inputClass(errors.customerPhone)}
               />
             </Field>
           </Section>
 
           <Section title="Delivery address">
-            <Field label="Address" className="sm:col-span-2">
+            <Field label="Address" name="street" required error={errors.street} className="sm:col-span-2">
               <Input
                 value={form.street}
                 onChange={setField("street")}
+                maxLength={200}
                 placeholder="House no., street, area"
-                className="h-10"
+                aria-invalid={Boolean(errors.street)}
+                className={inputClass(errors.street)}
               />
             </Field>
-            <Field label="City">
-              <Input value={form.city} onChange={setField("city")} className="h-10" />
+            <Field label="City" name="city" required error={errors.city}>
+              <Input
+                value={form.city}
+                onChange={setField("city")}
+                maxLength={60}
+                placeholder="Prayagraj"
+                aria-invalid={Boolean(errors.city)}
+                className={inputClass(errors.city)}
+              />
             </Field>
-            <Field label="State">
-              <Input value={form.state} onChange={setField("state")} className="h-10" />
+            <Field label="State" name="state" required error={errors.state}>
+              <Input
+                value={form.state}
+                onChange={setField("state")}
+                maxLength={60}
+                placeholder="Uttar Pradesh"
+                aria-invalid={Boolean(errors.state)}
+                className={inputClass(errors.state)}
+              />
             </Field>
-            <Field label="Pin code">
-              <Input inputMode="numeric" value={form.zipCode} onChange={setField("zipCode")} className="h-10" />
+            <Field label="Pin code" name="zipCode" error={errors.zipCode} hint="Optional, 6 digits">
+              <Input
+                inputMode="numeric"
+                value={form.zipCode}
+                onChange={setField("zipCode", pinInput)}
+                placeholder="211001"
+                aria-invalid={Boolean(errors.zipCode)}
+                className={inputClass(errors.zipCode)}
+              />
             </Field>
-            <Field label="Instructions for the rider">
+            <Field
+              label="Instructions for the rider"
+              name="deliveryInstructions"
+              error={errors.deliveryInstructions}
+              hint={`${form.deliveryInstructions.length}/300`}
+            >
               <Input
                 value={form.deliveryInstructions}
                 onChange={setField("deliveryInstructions")}
+                maxLength={300}
                 placeholder="Landmark, gate number…"
-                className="h-10"
+                aria-invalid={Boolean(errors.deliveryInstructions)}
+                className={inputClass(errors.deliveryInstructions)}
               />
             </Field>
           </Section>
 
           <Section title="Order items">
-            {form.restaurantId ? (
-              <OrderItemsPicker menu={menu} menuLoading={menuLoading} cart={cart} setCart={setCart} />
-            ) : (
-              <p className="text-sm text-slate-500 sm:col-span-2">Select a restaurant to search its menu.</p>
-            )}
+            <div data-field="items" className="sm:col-span-2">
+              {form.restaurantId ? (
+                <OrderItemsPicker
+                  menu={menu}
+                  menuLoading={menuLoading}
+                  cart={cart}
+                  setCart={setCart}
+                  errors={errors}
+                />
+              ) : (
+                <p className="text-sm text-slate-500">Select a restaurant to search its menu.</p>
+              )}
+            </div>
           </Section>
 
           <Section title="Delivery partner">
@@ -525,20 +707,26 @@ export default function ManualOrderModal({
           <Section title="Payment">
             <Field
               label="Order amount (₹)"
-              hint={amountTouched ? "Edited by hand" : "Calculated from the items, edit if needed"}
+              name="amount"
+              required
+              error={errors.amount}
+              hint={amountHint}
             >
               <Input
                 type="number"
-                min="0"
+                min="1"
+                step="1"
+                inputMode="decimal"
                 value={form.amount}
                 onChange={(e) => {
                   setAmountTouched(true)
                   setField("amount")(e)
                 }}
-                className="h-10"
+                aria-invalid={Boolean(errors.amount)}
+                className={inputClass(errors.amount)}
               />
             </Field>
-            <Field label="Payment method">
+            <Field label="Payment method" name="paymentMethod">
               <select value={form.paymentMethod} onChange={setField("paymentMethod")} className={SELECT_CLASS}>
                 {PAYMENT_METHODS.map((method) => (
                   <option key={method.value} value={method.value}>
@@ -547,21 +735,32 @@ export default function ManualOrderModal({
                 ))}
               </select>
             </Field>
-            <Field label="Rider payout (₹)" hint="Leave blank to use the fee settings">
+            <Field
+              label="Rider payout (₹)"
+              name="riderEarning"
+              error={errors.riderEarning}
+              hint="Leave blank to use the fee settings"
+            >
               <Input
                 type="number"
                 min="0"
+                inputMode="decimal"
                 value={form.riderEarning}
                 onChange={setField("riderEarning")}
                 placeholder="Auto"
-                className="h-10"
+                aria-invalid={Boolean(errors.riderEarning)}
+                className={inputClass(errors.riderEarning)}
               />
             </Field>
           </Section>
         </div>
 
         <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-6 py-4">
-          {error && <p className="mb-3 text-sm font-medium text-red-600">{error}</p>}
+          {errorCount > 0 && (
+            <p role="alert" className="mb-3 text-sm font-medium text-red-600">
+              {errorCount === 1 ? "Fix the highlighted field to continue." : `Fix the ${errorCount} highlighted fields to continue.`}
+            </p>
+          )}
           <div className="flex items-center justify-end gap-3">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
