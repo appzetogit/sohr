@@ -271,6 +271,8 @@ On launch, `GET /orders/current` returns `{ activeOrder }`. If one exists, go st
 
 ### Several orders at once (admin batching)
 
+> **Ready-made Flutter code:** [`docs/flutter/multi_order/`](docs/flutter/multi_order/README.md) has the API layer, controller and screen for this.
+
 Automatic dispatch gives a rider one order at a time. An **admin can deliberately assign more orders to a rider who is already on a trip**, for example several WhatsApp orders going the same way. The app has to handle that:
 
 - **The offer still arrives mid-trip.** The socket event `new_order` has `assignedByAdmin: true`. Show it even while a trip is running; ignore other offers while busy. You have 45 seconds to accept, after which the order goes back to the admin.
