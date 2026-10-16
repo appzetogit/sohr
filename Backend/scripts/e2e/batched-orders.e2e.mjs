@@ -20,6 +20,8 @@ import { FoodDeliveryPartner } from '../../src/modules/food/delivery/models/deli
 import { FoodRestaurant } from '../../src/modules/food/restaurant/models/restaurant.model.js';
 import { FoodOrder } from '../../src/modules/food/orders/models/order.model.js';
 import { FoodItem } from '../../src/modules/food/admin/models/food.model.js';
+import { FoodFeeSettings } from '../../src/modules/food/admin/models/feeSettings.model.js';
+import { PaymentGatewaySettings } from '../../src/core/payments/paymentGatewaySettings.js';
 
 const API = process.env.E2E_API;
 const MONGO_URI = process.env.MONGO_URI;
@@ -422,4 +424,128 @@ test('the link can be added when assigning from the table', async () => {
   const saved = await FoodOrder.findById(id).lean();
   assert.equal(saved.deliveryAddress.locationLink, link);
   assert.deepEqual(saved.deliveryAddress.location.coordinates, [81.8401, 25.4501]);
+});
+
+// ---------------------------------------------------------------- GST + payment at the door
+
+test('WhatsApp orders add GST from Fee Settings on top of the agreed amount', async () => {
+  await FoodFeeSettings.deleteMany({});
+  await FoodFeeSettings.create({ gstRate: 5, isActive: true });
+  const res = await call('POST', '/food/admin/orders/manual', {
+    token: state.adminToken,
+    body: manualOrder({ amount: 200 }),
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.json));
+  const saved = await FoodOrder.findById(orderKey(res.data.order)).lean();
+  assert.equal(saved.pricing.gstRate, 5);
+  assert.equal(saved.pricing.tax, 10);
+  assert.equal(saved.pricing.total, 210);
+  assert.equal(saved.payment.amountDue, 210, 'the rider collects the GST-inclusive bill');
+  state.gstOrder = orderKey(res.data.order);
+});
+
+test('editing the amount to collect at assign time does not add GST twice', async () => {
+  const res = await call('PATCH', `/food/admin/orders/${state.gstOrder}/assign`, {
+    token: state.adminToken,
+    body: { deliveryPartnerId: state.riders.sunil.id, orderDetails: { amount: 315 } },
+  });
+  assert.equal(res.status, 200, JSON.stringify(res.json));
+  const saved = await FoodOrder.findById(state.gstOrder).lean();
+  assert.equal(saved.pricing.total, 315);
+  assert.equal(saved.pricing.tax, 15); // 300 + 5%
+  assert.equal(saved.payment.amountDue, 315);
+});
+
+test('collect-at-door orders start unpaid; only "already paid online" is paid', async () => {
+  for (const [method, expected] of [['cash', 'cod_pending'], ['razorpay_qr', 'cod_pending'], ['razorpay', 'paid']]) {
+    const res = await call('POST', '/food/admin/orders/manual', {
+      token: state.adminToken,
+      body: manualOrder({ paymentMethod: method }),
+    });
+    assert.equal(res.status, 201, JSON.stringify(res.json));
+    const saved = await FoodOrder.findById(orderKey(res.data.order)).lean();
+    assert.equal(saved.payment.status, expected, method);
+  }
+});
+
+test('payment gateway settings: super admin only, validated, secrets never returned', async () => {
+  const empty = await call('GET', '/food/admin/payment-gateway', { token: state.adminToken });
+  assert.equal(empty.status, 200, JSON.stringify(empty.json));
+  assert.equal(empty.data.enabled, false);
+
+  const badId = await call('PUT', '/food/admin/payment-gateway', { token: state.adminToken, body: { keyId: 'pk_live_123' } });
+  assert.equal(badId.status, 400);
+  const noSecret = await call('PUT', '/food/admin/payment-gateway', {
+    token: state.adminToken,
+    body: { enabled: true, keyId: 'rzp_test_E2eKeyId12345' },
+  });
+  assert.equal(noSecret.status, 400);
+  assert.match(noSecret.json.message, /Key Secret/);
+
+  const secret = 'e2eSecretValue1234567890';
+  const saved = await call('PUT', '/food/admin/payment-gateway', {
+    token: state.adminToken,
+    body: { enabled: true, keyId: 'rzp_test_E2eKeyId12345', keySecret: secret, webhookSecret: 'e2e-webhook-secret' },
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.json));
+  assert.equal(saved.data.mode, 'test');
+  assert.equal(saved.data.hasKeySecret, true);
+  assert.equal(saved.data.hasWebhookSecret, true);
+  assert.ok(!JSON.stringify(saved.json).includes(secret), 'secret must never come back');
+
+  const doc = await PaymentGatewaySettings.findOne({ key: 'razorpay' }).lean();
+  assert.ok(doc.keySecretEnc.startsWith('v1:'));
+  assert.ok(!doc.keySecretEnc.includes(secret), 'stored encrypted');
+
+  // Saving again with a blank secret keeps the stored one.
+  const keep = await call('PUT', '/food/admin/payment-gateway', { token: state.adminToken, body: { enabled: true } });
+  assert.equal(keep.status, 200);
+  assert.equal((await PaymentGatewaySettings.findOne({ key: 'razorpay' }).lean()).keySecretEnc, doc.keySecretEnc);
+
+  // Riders can't read it.
+  const rider = await call('GET', '/food/admin/payment-gateway', { token: state.riders.ravi.token });
+  assert.ok([401, 403].includes(rider.status), `rider got ${rider.status}`);
+
+  // Test connection with made-up keys: Razorpay rejects them with a readable message.
+  const test = await call('POST', '/food/admin/payment-gateway/test', {
+    token: state.adminToken,
+    body: { keyId: 'rzp_test_E2eKeyId12345', keySecret: secret },
+  });
+  assert.equal(test.status, 400, JSON.stringify(test.json));
+  assert.match(test.json.message, /Razorpay said/);
+});
+
+test('webhook rejects bad signatures and accepts correctly signed collection events', async () => {
+  const crypto = await import('node:crypto');
+  const body = JSON.stringify({ event: 'qr_code.credited', payload: { qr_code: { entity: { id: 'qr_unknown_e2e' } } } });
+  const send = (signature) =>
+    fetch(`${API}/payments/webhook/razorpay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-razorpay-signature': signature },
+      body,
+    });
+
+  const bad = await send('0'.repeat(64));
+  assert.equal(bad.status, 400);
+
+  // Settings refresh every 30 s in other processes; the API that saved them is current.
+  const good = await send(crypto.createHmac('sha256', 'e2e-webhook-secret').update(body).digest('hex'));
+  assert.equal(good.status, 200, await good.text());
+});
+
+test('online collection fails clearly when Razorpay is switched off', async () => {
+  await call('PUT', '/food/admin/payment-gateway', { token: state.adminToken, body: { enabled: false } });
+  const created = await call('POST', '/food/admin/orders/manual', {
+    token: state.adminToken,
+    body: manualOrder({ deliveryPartnerId: state.riders.sunil.id }),
+  });
+  const id = orderKey(created.data.order);
+  await call('PATCH', `/food/delivery/orders/${id}/accept`, { token: state.riders.sunil.token });
+  const res = await call('POST', `/food/delivery/orders/${id}/collect/qr`, { token: state.riders.sunil.token, body: {} });
+  assert.equal(res.status, 400, JSON.stringify(res.json));
+  assert.match(res.json.message, /not set up/i);
+
+  // Cash still works.
+  const cash = await call('POST', `/food/delivery/orders/${id}/collect/cash`, { token: state.riders.sunil.token, body: {} });
+  assert.equal(cash.status, 200, JSON.stringify(cash.json));
 });

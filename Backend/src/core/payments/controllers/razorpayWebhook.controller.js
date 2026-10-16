@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { FoodOrder } from '../../../modules/food/orders/models/order.model.js';
 import * as foodTransactionService from '../../../modules/food/orders/services/foodTransaction.service.js';
-import { config } from '../../../config/env.js';
+import { getRazorpayWebhookSecret, safeEqual } from '../../../modules/food/orders/helpers/razorpay.helper.js';
+import { syncRazorpayQrPayment } from '../../../modules/food/orders/services/order-payment.service.js';
 import { logger } from '../../../utils/logger.js';
 
 /**
@@ -11,7 +12,8 @@ import { logger } from '../../../utils/logger.js';
  */
 export const handleRazorpayWebhook = async (req, res) => {
     const signature = req.headers['x-razorpay-signature'];
-    const secret = config.razorpayWebhookSecret;
+    // Set on the admin Payment Gateway page (falls back to RAZORPAY_WEBHOOK_SECRET).
+    const secret = getRazorpayWebhookSecret();
 
     // 1. Verify Signature using raw body buffer
     if (!signature || !secret || !req.rawBody) {
@@ -24,7 +26,7 @@ export const handleRazorpayWebhook = async (req, res) => {
         .update(req.rawBody)
         .digest('hex');
 
-    if (expected !== signature) {
+    if (!safeEqual(expected, signature)) {
         logger.warn('Razorpay Webhook: Signature verification failed.');
         return res.status(400).send('Invalid signature');
     }
@@ -90,6 +92,22 @@ export const handleRazorpayWebhook = async (req, res) => {
             } else {
                 // ✅ ADDED: Log warn if order not found but payment was captured
                 logger.warn(`Webhook [payment.captured]: Order not found or already paid for RZ-Order: ${rzOrderId}`);
+            }
+        }
+
+        // --- Rider collected at the door: UPI QR paid, or payment link paid ---
+        // We don't trust the webhook body for the amount: syncRazorpayQrPayment asks
+        // Razorpay directly and only settles a full, captured payment.
+        if (event === 'qr_code.credited' || event === 'payment_link.paid') {
+            const qrId = payload?.qr_code?.entity?.id;
+            const linkId = payload?.payment_link?.entity?.id;
+            const filter = qrId ? { 'payment.qr.qrId': qrId } : linkId ? { 'payment.qr.paymentLinkId': linkId } : null;
+            const order = filter ? await FoodOrder.findOne(filter) : null;
+            if (order) {
+                const result = await syncRazorpayQrPayment(order);
+                logger.info(`Webhook [${event}]: order ${order.order_id || order._id} collection status = ${result?.status}`);
+            } else {
+                logger.warn(`Webhook [${event}]: no order for ${qrId || linkId || 'unknown id'}`);
             }
         }
 

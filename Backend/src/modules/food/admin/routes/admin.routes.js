@@ -10,6 +10,11 @@ import * as diningAdminController from '../../dining/controllers/diningAdmin.con
 import * as subscriptionBillingController from '../controllers/subscriptionBilling.controller.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
 import { listUserCartsAdminController, getUserCartPricingAdminController } from '../controllers/userCartAdmin.controller.js';
+import {
+    getPaymentGatewaySettingsController,
+    savePaymentGatewaySettingsController,
+    testPaymentGatewaySettingsController,
+} from '../../../../core/payments/controllers/paymentGatewaySettings.controller.js';
 import { getAdminPageController, upsertAdminPageController } from '../controllers/pageContent.controller.js';
 import { upload } from '../../../../middleware/upload.js';
 import { invalidateCache } from '../../../../middleware/cache.js';
@@ -306,6 +311,10 @@ router.get('/feedback-experiences', feedbackExperienceController.getFeedbackExpe
 router.delete('/feedback-experiences/:id', feedbackExperienceController.deleteFeedbackExperience);
 
 // ----- Fee Settings -----
+// Razorpay keys. "payment_gateway" is not a grantable section, so only super admins pass.
+router.get('/payment-gateway', requireAdminPermission('payment_gateway', 'view'), getPaymentGatewaySettingsController);
+router.put('/payment-gateway', requireAdminPermission('payment_gateway', 'edit'), savePaymentGatewaySettingsController);
+router.post('/payment-gateway/test', requireAdminPermission('payment_gateway', 'edit'), testPaymentGatewaySettingsController);
 router.get('/fee-settings', adminController.getFeeSettings);
 router.put('/fee-settings', adminController.createOrUpdateFeeSettings);
 

@@ -2319,6 +2319,30 @@ const OFFER_RESTAURANT_FIELDS =
  * Only keys the admin actually sent are touched; a blank field must not wipe what the
  * order already knows.
  */
+const roundMoney = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+/** GST % from Fee Settings (admin panel), 0 when unset. */
+async function currentGstRate() {
+  try {
+    const rate = Number((await loadActiveFeeSettings())?.gstRate);
+    return Number.isFinite(rate) && rate > 0 ? Math.min(rate, 100) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Payment status for a method: collect-at-door methods (cash, or online via the rider's
+ * QR) start unpaid; "already paid online" / wallet are paid. An order that was already
+ * collected stays paid.
+ */
+function paymentStatusFor(method, currentStatus) {
+  if (method === 'cash' || method === 'razorpay_qr') {
+    return currentStatus === 'paid' ? 'paid' : 'cod_pending';
+  }
+  return 'paid';
+}
+
 function applyAdminOrderDetails(order, details) {
   if (!details || typeof details !== 'object') return;
 
@@ -2350,22 +2374,33 @@ function applyAdminOrderDetails(order, details) {
     order.deliveryAddress = normalizeDeliveryAddress(merged);
   }
 
+  // "Amount to collect" in the assign dialog is the final bill, GST included. When it
+  // changes, split it back into pre-GST amount + GST at the order's rate, and keep the
+  // item subtotal so the difference shows as discount / delivery charge.
   const amount = Number(details.amount);
-  if (Number.isFinite(amount) && amount >= 0) {
+  const currentPricing = order.pricing?.toObject ? order.pricing.toObject() : { ...(order.pricing || {}) };
+  if (Number.isFinite(amount) && amount > 0 && roundMoney(amount) !== roundMoney(currentPricing.total)) {
+    const rate = Number(currentPricing.gstRate) || 0;
+    const preTax = rate > 0 ? roundMoney(amount / (1 + rate / 100)) : roundMoney(amount);
+    const subtotal = Number(currentPricing.subtotal) || preTax;
     order.pricing = {
-      ...(order.pricing?.toObject ? order.pricing.toObject() : order.pricing || {}),
-      subtotal: amount,
-      total: amount,
+      ...currentPricing,
+      subtotal,
+      tax: roundMoney(amount - preTax),
+      discount: subtotal > preTax ? roundMoney(subtotal - preTax) : 0,
+      deliveryFee: preTax > subtotal ? roundMoney(preTax - subtotal) : 0,
+      total: roundMoney(amount),
     };
-    if (order.payment) order.payment.amountDue = amount;
+    if (order.payment) order.payment.amountDue = roundMoney(amount);
   }
 
   if (set(details.paymentMethod)) {
     const method = String(details.paymentMethod).trim();
+    const current = order.payment?.toObject ? order.payment.toObject() : order.payment || {};
     order.payment = {
-      ...(order.payment?.toObject ? order.payment.toObject() : order.payment || {}),
+      ...current,
       method,
-      status: method === 'cash' ? 'cod_pending' : order.payment?.status || 'paid',
+      status: paymentStatusFor(method, current.status),
     };
   }
 
@@ -2603,11 +2638,17 @@ export async function createManualOrderAdmin(dto, adminId) {
     Math.round(orderItems.reduce((sum, line) => sum + line.price * line.quantity, 0) * 100) / 100;
   // The admin agrees the final total with the customer: below the item total is a
   // discount, above it is a delivery charge. Either way pricing still adds up.
+  // GST (Fee Settings → GST rate, e.g. 5%) is charged on the agreed amount, rounded to
+  // the rupee like the customer app, and added to the bill the rider collects.
+  const gstRate = await currentGstRate();
+  const tax = Math.round((amount * gstRate) / 100);
   const pricing = {
     subtotal: itemsTotal,
-    discount: itemsTotal > amount ? Math.round((itemsTotal - amount) * 100) / 100 : 0,
-    deliveryFee: amount > itemsTotal ? Math.round((amount - itemsTotal) * 100) / 100 : 0,
-    total: amount,
+    discount: itemsTotal > amount ? roundMoney(itemsTotal - amount) : 0,
+    deliveryFee: amount > itemsTotal ? roundMoney(amount - itemsTotal) : 0,
+    tax,
+    gstRate,
+    total: roundMoney(amount + tax),
     currency: 'INR',
     distanceKm: null,
     roadDistanceKm: null,
@@ -2651,8 +2692,10 @@ export async function createManualOrderAdmin(dto, adminId) {
     pricing,
     payment: {
       method,
-      status: method === 'cash' ? 'cod_pending' : 'paid',
-      amountDue: amount,
+      // Cash and "online at the door" are collected by the rider; only "already paid
+      // online" / wallet orders start as paid.
+      status: paymentStatusFor(method),
+      amountDue: pricing.total,
     },
     orderStatus: 'confirmed',
     dispatch: { status: 'unassigned', assignedBy: 'ADMIN' },

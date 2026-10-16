@@ -12,11 +12,10 @@ import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { FIELD_ORDER, validateManualOrder, normalizeIndianMobile, isGoogleMapsLink } from "./manualOrderValidation"
 
+// "Collect at the door": the rider picks cash or online (Razorpay UPI QR) when delivering.
 const PAYMENT_METHODS = [
-  { value: "cash", label: "Cash on delivery" },
-  { value: "razorpay_qr", label: "QR / UPI on delivery" },
+  { value: "cash", label: "Collect at the door (cash or online QR)" },
   { value: "razorpay", label: "Already paid online" },
-  { value: "wallet", label: "Wallet" },
 ]
 
 const emptyForm = {
@@ -406,6 +405,29 @@ function RiderPicker({ partners, loading, selectedId, onSelect }) {
   )
 }
 
+/** What the customer will pay: matches the server (GST rounded to the rupee). */
+function BillSummary({ itemsTotal, amount, gstRate }) {
+  const base = Number(amount)
+  if (!Number.isFinite(base) || base <= 0) return null
+  const gst = Math.round((base * gstRate) / 100)
+  const diff = Math.round((base - itemsTotal) * 100) / 100
+  const row = (label, value, strong = false) => (
+    <div className={`flex justify-between ${strong ? "border-t border-slate-200 pt-2 text-base font-bold text-slate-900" : "text-slate-600"}`}>
+      <span>{label}</span>
+      <span className="tabular-nums">{value}</span>
+    </div>
+  )
+  return (
+    <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:col-span-2">
+      {itemsTotal > 0 && row("Items", `₹${itemsTotal}`)}
+      {itemsTotal > 0 && diff < 0 && row("Discount", `− ₹${-diff}`)}
+      {itemsTotal > 0 && diff > 0 && row("Delivery charge", `₹${diff}`)}
+      {gstRate > 0 && row(`GST ${gstRate}%`, `₹${gst}`)}
+      {row("Customer pays", `₹${base + gst}`, true)}
+    </div>
+  )
+}
+
 export default function ManualOrderModal({
   isOpen,
   onOpenChange,
@@ -422,6 +444,8 @@ export default function ManualOrderModal({
   const [partnersLoading, setPartnersLoading] = useState(false)
   const [deliveryPartnerId, setDeliveryPartnerId] = useState("")
   const [errors, setErrors] = useState({})
+  // GST % from Fee Settings (admin panel); added on top of the order amount.
+  const [gstRate, setGstRate] = useState(0)
   // Errors are shown once the admin has tried to submit, then kept live as they fix them.
   const [attempted, setAttempted] = useState(false)
   const bodyRef = useRef(null)
@@ -439,6 +463,21 @@ export default function ManualOrderModal({
     setErrors({})
     setAttempted(false)
   }, [isOpen, restaurantOptions])
+
+  useEffect(() => {
+    if (!isOpen) return
+    let cancelled = false
+    adminAPI
+      .getFeeSettings()
+      .then((res) => {
+        const rate = Number(res?.data?.data?.feeSettings?.gstRate)
+        if (!cancelled) setGstRate(Number.isFinite(rate) && rate > 0 ? rate : 0)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) return
@@ -741,7 +780,7 @@ export default function ManualOrderModal({
 
           <Section title="Payment">
             <Field
-              label="Order amount (₹)"
+              label={gstRate ? "Order amount before GST (₹)" : "Order amount (₹)"}
               name="amount"
               required
               error={errors.amount}
@@ -787,6 +826,7 @@ export default function ManualOrderModal({
                 className={inputClass(errors.riderEarning)}
               />
             </Field>
+            <BillSummary itemsTotal={cartTotal} amount={form.amount} gstRate={gstRate} />
           </Section>
         </div>
 

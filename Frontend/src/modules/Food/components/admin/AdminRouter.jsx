@@ -119,6 +119,7 @@ const SupportCMS = lazy(() => import("@food/pages/admin/settings/SupportCMS"));
 
 // System Settings
 const ThirdParty = lazy(() => import("@food/pages/admin/system/ThirdParty"));
+const PaymentGateway = lazy(() => import("@food/pages/admin/system/PaymentGateway"));
 const FirebaseNotification = lazy(() => import("@food/pages/admin/system/FirebaseNotification"));
 const OfflinePaymentSetup = lazy(() => import("@food/pages/admin/system/OfflinePaymentSetup"));
 const JoinUsPageSetup = lazy(() => import("@food/pages/admin/system/JoinUsPageSetup"));
@@ -278,6 +279,7 @@ export default function AdminRouter() {
             {/* FOOD & CATEGORY MANAGEMENT */}
             <Route path="categories" element={<Category />} />
             <Route path="fee-settings" element={<FeeSettings />} />
+            <Route path="payment-gateway" element={<PaymentGateway />} />
             <Route path="referral-settings" element={<ReferralSettings />} />
             <Route path="foods" element={<FoodsList />} />
             <Route path="food/list" element={<FoodsList />} />

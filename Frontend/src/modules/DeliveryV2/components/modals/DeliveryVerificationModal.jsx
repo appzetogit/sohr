@@ -181,8 +181,11 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [collectQrLink, setCollectQrLink] = useState(null);
+  // Razorpay UPI QR image (QR Codes API). Null when a payment link was issued instead.
+  const [collectQrImage, setCollectQrImage] = useState(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
-  const isInitialPaid = ['paid', 'captured', 'authorized'].includes(String(order.payment?.status || "").toLowerCase());
+  // Only a fully captured payment counts; the server refuses to complete anything else.
+  const isInitialPaid = String(order.payment?.status || "").toLowerCase() === 'paid';
   const [paymentStatus, setPaymentStatus] = useState(isInitialPaid ? 'paid' : 'idle');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCashAccepted, setIsCashAccepted] = useState(false);
@@ -190,7 +193,8 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const pollingRef = useRef(null);
 
   const orderId = order.orderId || order._id || 'ORD';
-  const amountToCollect = order.pricing?.total || order.amountToCollect || 0;
+  // payment.amountDue is what the server charges (includes GST); pricing.total as fallback.
+  const amountToCollect = Number(order.payment?.amountDue ?? order.pricing?.total ?? order.amountToCollect ?? 0) || 0;
 
 
   const checkPaymentSync = useCallback(async () => {
@@ -200,7 +204,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
       const payload = res?.data?.data ?? res?.data ?? {};
       const status = String(payload?.payment?.status || "").toLowerCase();
       console.log('[PaymentSync] polled status:', status, payload?.payment);
-      if (['paid', 'partially_paid', 'captured', 'authorized'].includes(status)) {
+      if (status === 'paid') {
         setPaymentStatus('paid');
         if (pollingRef.current) {
           clearInterval(pollingRef.current);
@@ -262,9 +266,12 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
         name: order.userName || 'Customer',
         phone: order.userPhone || ''
       });
-      const link = res?.data?.data?.shortUrl || res?.data?.shortUrl || null;
-      if (link) {
+      const data = res?.data?.data || res?.data || {};
+      const link = data.shortUrl || null;
+      const image = data.kind === 'upi_qr' ? data.imageUrl : null;
+      if (link || image) {
         setCollectQrLink(link);
+        setCollectQrImage(image);
         setPaymentStatus('pending');
         setShowQrModal(true);
         setIsCashAccepted(false); // Reset cash if they try QR
@@ -272,7 +279,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
         toast.error("Could not generate QR code");
       }
     } catch (e) {
-      toast.error("QR Generation failed");
+      toast.error(e?.response?.data?.message || "QR Generation failed");
     } finally {
       setIsGeneratingQr(false);
     }
@@ -287,7 +294,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
       setShowQrModal(false);
       toast.success("Switched to Cash Collection");
     } catch (err) {
-      toast.error("Failed to switch to cash");
+      toast.error(err?.response?.data?.message || "Failed to switch to cash");
     } finally {
       setIsSwitchingToCash(false);
     }
@@ -373,7 +380,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                      className={`w-full py-5 bg-white border-2 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 shadow-xl shadow-amber-900/5 active:scale-95 transition-all rounded-2xl ${isCashAccepted ? 'border-gray-100 text-gray-400 opacity-50' : 'border-amber-200 text-amber-800'}`}
                    >
                      {isGeneratingQr ? <Loader2 className="w-5 h-5 animate-spin" /> : <QrCode className="w-5 h-5" />}
-                     Show Payment QR
+                     Online (UPI QR)
                    </button>
 
 
@@ -390,7 +397,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
                        className="w-full py-5 bg-white border-2 border-gray-200 text-gray-700 text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all rounded-2xl"
                      >
                        {isSwitchingToCash ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
-                       Take Cash
+                       Cash
                      </button>
                    )}
 
@@ -437,10 +444,13 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
               <p className="text-gray-500 text-sm mb-8 font-medium">Order Total: ₹{amountToCollect.toFixed(2)}</p>
               
               <div className="relative p-6 bg-gray-50 rounded-3xl border-2 border-gray-100 mb-8">
-                 <img 
-                   src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(collectQrLink)}`} 
-                   alt="Razorpay QR"
-                   className="w-56 h-56"
+                 <img
+                   src={
+                     collectQrImage ||
+                     `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(collectQrLink)}`
+                   }
+                   alt="Scan with any UPI app to pay"
+                   className={collectQrImage ? "w-64 h-auto" : "w-56 h-56"}
                  />
                  <button 
                     onClick={handleManualCheck}

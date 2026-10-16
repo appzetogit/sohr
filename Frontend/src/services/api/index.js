@@ -1118,6 +1118,14 @@ export const adminAPI = {
       { contextModule: "admin" },
     ),
 
+  /** Razorpay keys (super admin only). Secrets are write-only. */
+  getPaymentGatewaySettings: () =>
+    apiClient.get("/food/admin/payment-gateway", { contextModule: "admin" }),
+  savePaymentGatewaySettings: (body) =>
+    apiClient.put("/food/admin/payment-gateway", body ?? {}, { contextModule: "admin" }),
+  testPaymentGatewaySettings: (body) =>
+    apiClient.post("/food/admin/payment-gateway/test", body ?? {}, { contextModule: "admin" }),
+
   /** Fee Settings (admin) */
   getFeeSettings: () =>
     apiClient.get("/food/admin/fee-settings", { contextModule: "admin" }),
