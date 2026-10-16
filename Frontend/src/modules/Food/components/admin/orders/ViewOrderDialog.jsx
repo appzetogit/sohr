@@ -200,6 +200,22 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
                 </p>
                 <p className="text-sm font-medium text-slate-900">{order.date}{order.time ? `, ${order.time}` : ""}</p>
               </div>
+              {order.locationLink && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    Customer location
+                  </p>
+                  <a
+                    href={order.locationLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-semibold text-emerald-700 hover:underline"
+                  >
+                    Open in Google Maps
+                  </a>
+                </div>
+              )}
               {order.estimatedDeliveryTime && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">

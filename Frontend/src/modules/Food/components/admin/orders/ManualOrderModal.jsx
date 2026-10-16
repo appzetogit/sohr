@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Bike, Loader2, MessageSquare, Minus, Plus, Search, Trash2 } from "lucide-react"
+import { Bike, ExternalLink, Loader2, MapPin, MessageSquare, Minus, Plus, Search, Trash2 } from "lucide-react"
 import { adminAPI } from "@food/api"
 import {
   Dialog,
@@ -10,7 +10,7 @@ import {
 } from "@food/components/ui/dialog"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
-import { FIELD_ORDER, validateManualOrder, normalizeIndianMobile } from "./manualOrderValidation"
+import { FIELD_ORDER, validateManualOrder, normalizeIndianMobile, isGoogleMapsLink } from "./manualOrderValidation"
 
 const PAYMENT_METHODS = [
   { value: "cash", label: "Cash on delivery" },
@@ -27,6 +27,7 @@ const emptyForm = {
   city: "",
   state: "",
   zipCode: "",
+  locationLink: "",
   amount: "",
   paymentMethod: "cash",
   riderEarning: "",
@@ -544,6 +545,7 @@ export default function ManualOrderModal({
       paymentMethod: form.paymentMethod,
       ...(form.riderEarning === "" ? {} : { riderEarning: Number(form.riderEarning) }),
       deliveryInstructions: clean(form.deliveryInstructions),
+      ...(form.locationLink.trim() ? { locationLink: form.locationLink.trim() } : {}),
       ...(deliveryPartnerId ? { deliveryPartnerId } : {}),
     })
   }
@@ -661,6 +663,39 @@ export default function ManualOrderModal({
                 aria-invalid={Boolean(errors.zipCode)}
                 className={inputClass(errors.zipCode)}
               />
+            </Field>
+            <Field
+              label="Customer location link"
+              name="locationLink"
+              error={errors.locationLink}
+              hint="Optional. Paste the Google Maps location the customer shared on WhatsApp; the rider gets a button to open it."
+              className="sm:col-span-2"
+            >
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    type="url"
+                    inputMode="url"
+                    value={form.locationLink}
+                    onChange={setField("locationLink", (v) => v.trim())}
+                    maxLength={1000}
+                    placeholder="https://maps.app.goo.gl/…"
+                    aria-invalid={Boolean(errors.locationLink)}
+                    className={inputClass(errors.locationLink, "pl-9")}
+                  />
+                </div>
+                {isGoogleMapsLink(form.locationLink) && (
+                  <a
+                    href={form.locationLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                  >
+                    Check <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                )}
+              </div>
             </Field>
             <Field
               label="Instructions for the rider"

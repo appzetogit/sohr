@@ -52,6 +52,8 @@ const deliveryAddressSchema = new mongoose.Schema(
         state: { type: String, required: true, trim: true },
         zipCode: { type: String, default: '', trim: true },
         phone: { type: String, default: '', trim: true },
+        // Google Maps link the customer shared (WhatsApp orders); the rider opens it.
+        locationLink: { type: String, default: '', trim: true },
         location: {
             type: { type: String, enum: ['Point'], default: 'Point' },
             coordinates: { type: [Number], default: undefined }

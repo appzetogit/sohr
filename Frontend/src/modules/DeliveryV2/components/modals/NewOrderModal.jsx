@@ -120,9 +120,13 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, swapGuard
     'Restaurant';
   const restaurantAddress = lockedOrder.restaurantAddress || lockedOrder.restaurant_address || (lockedOrder.restaurantId?.location?.address) || 'Address not available';
   const customerAddress = resolveCustomerAddress(lockedOrder) || 'Location not available';
-  const mapsLink = customerAddress !== 'Location not available'
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerAddress)}`
-    : null;
+  // Prefer the exact location the customer shared (WhatsApp orders) over an address search.
+  const sharedLocationLink = String(lockedOrder.customerLocationLink || lockedOrder.deliveryAddress?.locationLink || '').trim();
+  const mapsLink = /^https?:\/\//i.test(sharedLocationLink)
+    ? sharedLocationLink
+    : customerAddress !== 'Location not available'
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerAddress)}`
+      : null;
 
   return (
     <motion.div

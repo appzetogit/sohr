@@ -38,3 +38,23 @@ export function openGoogleMapsForAddress(address) {
   );
   return true;
 }
+
+/**
+ * Google Maps link the customer shared (WhatsApp orders), validated by the server.
+ * Empty string when there is none.
+ */
+export function resolveCustomerLocationLink(order) {
+  const link = String(order?.customerLocationLink || order?.deliveryAddress?.locationLink || '').trim();
+  return /^https?:\/\//i.test(link) ? link : '';
+}
+
+/** Open the customer's shared location if there is one, otherwise search their address. */
+export function openCustomerLocation(order) {
+  const link = resolveCustomerLocationLink(order);
+  if (link) {
+    window.open(link, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  const address = resolveCustomerAddress(order);
+  if (address) openGoogleMapsForAddress(address);
+}

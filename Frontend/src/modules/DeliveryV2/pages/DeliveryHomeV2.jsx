@@ -16,7 +16,7 @@ import { PickupActionModal } from '@/modules/DeliveryV2/components/modals/Pickup
 import { DeliveryVerificationModal } from '@/modules/DeliveryV2/components/modals/DeliveryVerificationModal';
 import { OrderSummaryModal } from '@/modules/DeliveryV2/components/modals/OrderSummaryModal';
 import ActionSlider from '@/modules/DeliveryV2/components/ui/ActionSlider';
-import { openGoogleMapsForAddress, resolveCustomerAddress } from '@/modules/DeliveryV2/utils/orderAddress';
+import { openCustomerLocation, openGoogleMapsForAddress, resolveCustomerAddress, resolveCustomerLocationLink } from '@/modules/DeliveryV2/utils/orderAddress';
 
 // Sub Pages
 import PocketV2 from '@/modules/DeliveryV2/pages/PocketV2';
@@ -1018,10 +1018,11 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                               })()}
                               {(() => {
                                 const customerAddress = resolveCustomerAddress(activeOrder);
-                                if (!customerAddress) return null;
+                                if (!customerAddress && !resolveCustomerLocationLink(activeOrder)) return null;
                                 return (
                                   <button
-                                    onClick={() => openGoogleMapsForAddress(customerAddress)}
+                                    onClick={() => openCustomerLocation(activeOrder)}
+                                    aria-label="Open customer location"
                                     className="w-11 h-11 rounded-2xl bg-gray-950 flex items-center justify-center text-white shadow-xl hover:bg-gray-800 transition-colors active:scale-90 shrink-0"
                                   >
                                     <Navigation className="w-5 h-5" />
@@ -1030,6 +1031,17 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                               })()}
                             </div>
                           </div>
+
+                          {/* Location the customer shared on WhatsApp */}
+                          {resolveCustomerLocationLink(activeOrder) && (
+                            <button
+                              onClick={() => openCustomerLocation(activeOrder)}
+                              className="w-full mb-6 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-lg active:scale-[0.98] transition"
+                            >
+                              <Navigation className="w-4 h-4" />
+                              Open customer's shared location
+                            </button>
+                          )}
 
                           {/* Customer Instructions Panel */}
                           {(() => {

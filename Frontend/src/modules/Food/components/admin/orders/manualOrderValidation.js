@@ -11,6 +11,34 @@ export function normalizeIndianMobile(value) {
   return /^[6-9]\d{9}$/.test(local) ? local : null
 }
 
+const MAPS_HOSTS = new Set([
+  "maps.app.goo.gl",
+  "goo.gl",
+  "maps.google.com",
+  "google.com",
+  "www.google.com",
+  "maps.google.co.in",
+  "google.co.in",
+  "www.google.co.in",
+])
+
+/** Same rule as the server: an http(s) Google Maps link (full or maps.app.goo.gl). */
+export function isGoogleMapsLink(value) {
+  let url
+  try {
+    url = new URL(String(value || "").trim())
+  } catch {
+    return false
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false
+  const host = url.hostname.toLowerCase()
+  if (!MAPS_HOSTS.has(host)) return false
+  if (host === "goo.gl") return url.pathname.startsWith("/maps")
+  if (host === "maps.app.goo.gl") return url.pathname.length > 1
+  if (host.startsWith("maps.")) return true
+  return url.pathname.startsWith("/maps")
+}
+
 const clean = (v) => String(v ?? "").trim().replace(/\s+/g, " ")
 
 function checkName(value, label, min, max) {
@@ -53,6 +81,10 @@ export function validateManualOrder(form, cart = []) {
   const zip = clean(form.zipCode)
   if (zip && !/^[1-9]\d{5}$/.test(zip)) set("zipCode", "Pin code must be 6 digits")
 
+  const link = String(form.locationLink || "").trim()
+  if (link && !isGoogleMapsLink(link))
+    set("locationLink", "Paste a Google Maps link (maps.app.goo.gl or google.com/maps)")
+
   if (clean(form.deliveryInstructions).length > 300)
     set("deliveryInstructions", "Instructions must be at most 300 characters")
 
@@ -91,6 +123,7 @@ export const FIELD_ORDER = [
   "city",
   "state",
   "zipCode",
+  "locationLink",
   "deliveryInstructions",
   "items",
   "amount",

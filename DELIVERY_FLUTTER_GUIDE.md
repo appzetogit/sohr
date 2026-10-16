@@ -332,6 +332,30 @@ Widget dropActions(Map<String, dynamic> order) {
 
 Older app builds that still call `verify-drop-otp` won't break: the server answers 200 and lets them through. Ship the change anyway, so riders aren't shown a code screen they can't complete.
 
+### Customer's shared location link (WhatsApp orders)
+
+When the admin pastes the Google Maps location a customer shared on WhatsApp, every rider-facing order carries it as **`customerLocationLink`**. That covers `/orders/current`, `/orders/available` and the `new_order` socket offer; push data has it too. It is `""` when there is none. The server only accepts Google Maps links (`maps.app.goo.gl`, `google.com/maps`, `maps.google.com`).
+
+Show a **"Open customer location"** button when it isn't empty, and prefer it over searching the address:
+
+```dart
+import 'package:url_launcher/url_launcher.dart';
+
+Future<void> openCustomerLocation(Map<String, dynamic> order) async {
+  final link = (order['customerLocationLink'] ?? '').toString().trim();
+  final address = [order['deliveryAddress']?['street'], order['deliveryAddress']?['city']]
+      .where((v) => v != null && '$v'.isNotEmpty)
+      .join(', ');
+  final uri = link.isNotEmpty
+      ? Uri.parse(link)
+      : Uri.https('www.google.com', '/maps/search/', {'api': '1', 'query': address});
+  // Opens the Google Maps app when installed, otherwise the browser.
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+```
+
+When the link contains coordinates, the server also uses them as the drop pin. `deliveryAddress.location.coordinates` is `[lng, lat]`, so the map marker and trip distance work too.
+
 ## 8. Cash on delivery
 
 1. Show a QR: `POST /orders/:orderId/collect/qr` returns `{ shortUrl, imageUrl, amount, expiresAt }`. Render `shortUrl` as a QR code.

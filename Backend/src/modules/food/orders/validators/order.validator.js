@@ -1,5 +1,13 @@
 import { z } from 'zod';
 import { ValidationError } from '../../../../core/auth/errors.js';
+import { isGoogleMapsLink, MAX_MAPS_LINK_LENGTH } from '../../shared/mapsLink.util.js';
+
+const mapsLink = z
+    .string()
+    .trim()
+    .max(MAX_MAPS_LINK_LENGTH, 'Location link is too long')
+    .refine((v) => v === '' || isGoogleMapsLink(v), 'Paste a Google Maps link (maps.app.goo.gl or google.com/maps)')
+    .optional();
 
 const orderItemSchema = z.object({
     itemId: z.string().min(1, 'Item id required'),
@@ -203,7 +211,8 @@ const assignOrderDetailsSchema = z.object({
     paymentMethod: manualPaymentMethod.optional(),
     riderEarning: z.union([z.number(), z.string()]).optional(),
     note: z.string().optional(),
-    deliveryInstructions: z.string().optional()
+    deliveryInstructions: z.string().optional(),
+    locationLink: mapsLink
 });
 
 export function validateAssignDeliveryDto(body) {
@@ -310,6 +319,8 @@ export function validateManualOrderDto(body) {
                 .optional(),
             note: z.string().trim().max(500).optional(),
             deliveryInstructions: z.string().trim().max(300, 'Rider instructions must be at most 300 characters').optional(),
+            // Customer's shared Google Maps location; the rider gets an "open location" button.
+            locationLink: mapsLink,
             // Optional: assign a rider in the same request (they may already be on a trip).
             deliveryPartnerId: z
                 .string()

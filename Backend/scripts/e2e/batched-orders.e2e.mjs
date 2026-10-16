@@ -369,3 +369,57 @@ test('bad customer details are refused with a clear message', async () => {
     assert.match(res.json.message, pattern);
   }
 });
+
+test('a pasted Google Maps link is kept for the rider and becomes the delivery pin', async () => {
+  const link = 'https://maps.google.com/?q=25.4401,81.8463';
+  const res = await call('POST', '/food/admin/orders/manual', {
+    token: state.adminToken,
+    body: manualOrder({ locationLink: link, deliveryPartnerId: state.riders.sunil.id }),
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.json));
+  const id = orderKey(res.data.order);
+  const saved = await FoodOrder.findById(id).lean();
+  assert.equal(saved.deliveryAddress.locationLink, link);
+  assert.deepEqual(saved.deliveryAddress.location.coordinates, [81.8463, 25.4401]);
+  assert.ok(saved.pricing.distanceKm > 0, 'distance comes from the pin');
+
+  // The rider sees it on the offer list and after accepting.
+  const offers = await call('GET', '/food/delivery/orders/available', { token: state.riders.sunil.token });
+  const offer = listDocs(offers.data).find((o) => orderKey(o) === id);
+  assert.equal(offer.customerLocationLink, link);
+});
+
+test('only Google Maps links are accepted', async () => {
+  const res = await call('POST', '/food/admin/orders/manual', {
+    token: state.adminToken,
+    body: manualOrder({ locationLink: 'https://evil.example/maps?q=25.44,81.84' }),
+  });
+  assert.equal(res.status, 400, JSON.stringify(res.json));
+  assert.match(res.json.message, /Google Maps link/);
+});
+
+test('a link without coordinates is kept, and the order still saves without a pin', async () => {
+  const link = 'https://www.google.com/maps/place/Civil+Lines,+Prayagraj';
+  const res = await call('POST', '/food/admin/orders/manual', {
+    token: state.adminToken,
+    body: manualOrder({ locationLink: link }),
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.json));
+  const saved = await FoodOrder.findById(orderKey(res.data.order)).lean();
+  assert.equal(saved.deliveryAddress.locationLink, link);
+  assert.equal(saved.deliveryAddress.location, undefined);
+});
+
+test('the link can be added when assigning from the table', async () => {
+  const created = await call('POST', '/food/admin/orders/manual', { token: state.adminToken, body: manualOrder() });
+  const id = orderKey(created.data.order);
+  const link = 'https://www.google.com/maps/@25.4501,81.8401,17z';
+  const assign = await call('PATCH', `/food/admin/orders/${id}/assign`, {
+    token: state.adminToken,
+    body: { deliveryPartnerId: state.riders.sunil.id, orderDetails: { locationLink: link } },
+  });
+  assert.equal(assign.status, 200, JSON.stringify(assign.json));
+  const saved = await FoodOrder.findById(id).lean();
+  assert.equal(saved.deliveryAddress.locationLink, link);
+  assert.deepEqual(saved.deliveryAddress.location.coordinates, [81.8401, 25.4501]);
+});

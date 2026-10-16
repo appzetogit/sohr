@@ -69,3 +69,15 @@ test("amount must be positive and payout sensible", () => {
   assert.ok(validateManualOrder({ ...validForm, riderEarning: "9000" }, validCart).riderEarning)
   assert.deepEqual(validateManualOrder({ ...validForm, riderEarning: "40" }, validCart), {})
 })
+
+test("location link: optional, but must be a Google Maps link", async () => {
+  const { isGoogleMapsLink } = await import("./manualOrderValidation.js")
+  assert.deepEqual(validateManualOrder({ ...validForm, locationLink: "" }, validCart), {})
+  for (const ok of ["https://maps.app.goo.gl/AbC123", "https://maps.google.com/?q=25.45,81.83", "https://www.google.com/maps/@25.4,81.8,17z"]) {
+    assert.equal(isGoogleMapsLink(ok), true, ok)
+    assert.deepEqual(validateManualOrder({ ...validForm, locationLink: ok }, validCart), {})
+  }
+  for (const bad of ["https://evil.example/maps", "https://www.google.com/search?q=x", "hello", "javascript:alert(1)"]) {
+    assert.ok(validateManualOrder({ ...validForm, locationLink: bad }, validCart).locationLink, bad)
+  }
+})

@@ -132,6 +132,7 @@ export function buildIncomingOrderPushData(order, payload, acceptanceDeadlineAt)
     restaurantName: s(payload?.restaurantName),
     restaurantAddress: s(payload?.restaurantAddress),
     customerAddress: s(payload?.customerAddress),
+    customerLocationLink: s(payload?.customerLocationLink),
     tripDistanceKm: s(payload?.tripDistanceKm ?? ''),
     tripDurationMins: s(payload?.tripDurationMins ?? ''),
     riderEarning: s(payload?.riderEarning ?? 0),

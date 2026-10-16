@@ -4,6 +4,7 @@ import { FoodOrder, FoodSettings } from '../models/order.model.js';
 import { logger } from '../../../../utils/logger.js';
 import { FoodUser } from '../../../../core/users/user.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
+import { resolveMapsLink } from '../../shared/mapsLink.util.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodDeliveryPartner } from '../../delivery/models/deliveryPartner.model.js';
 import { FoodZone } from '../../admin/models/zone.model.js';
@@ -2456,7 +2457,16 @@ export async function assignDeliveryPartnerAdmin(orderId, dto, adminId) {
   // one rider, and the rider's accept endpoint allows admin-assigned orders through
   // even while another trip is in progress.
 
-  applyAdminOrderDetails(order, dto?.orderDetails);
+  const details = dto?.orderDetails ? { ...dto.orderDetails } : undefined;
+  if (details?.locationLink) {
+    const linkInfo = await resolveMapsLink(details.locationLink);
+    details.address = {
+      ...(details.address || {}),
+      locationLink: linkInfo.link,
+      ...(linkInfo.lat != null ? { latitude: linkInfo.lat, longitude: linkInfo.lng } : {}),
+    };
+  }
+  applyAdminOrderDetails(order, details);
 
   const now = new Date();
   order.dispatch.status = 'assigned';
@@ -2567,6 +2577,10 @@ export async function createManualOrderAdmin(dto, adminId) {
   const customerName = String(dto.customerName || '').trim();
   const user = await findOrCreateUserByPhone({ phone: customerPhone });
 
+  // The customer's shared Google Maps link doubles as the delivery pin when it carries
+  // coordinates: the rider gets a map marker, trip distance and distance-based payout.
+  const linkInfo = await resolveMapsLink(dto.locationLink);
+
   const deliveryAddress = normalizeDeliveryAddress({
     label: 'Home',
     name: customerName,
@@ -2577,8 +2591,9 @@ export async function createManualOrderAdmin(dto, adminId) {
     state: String(dto.address.state).trim(),
     zipCode: String(dto.address.zipCode || '').trim(),
     phone: customerPhone,
-    latitude: dto.address.latitude,
-    longitude: dto.address.longitude,
+    latitude: dto.address.latitude ?? linkInfo.lat ?? undefined,
+    longitude: dto.address.longitude ?? linkInfo.lng ?? undefined,
+    locationLink: linkInfo.link,
   });
 
   const amount = Math.round(Number(dto.amount) * 100) / 100;

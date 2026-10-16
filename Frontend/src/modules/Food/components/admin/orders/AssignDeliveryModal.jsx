@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Bike, Loader2, Search, Send } from "lucide-react"
+import { Bike, ExternalLink, Loader2, MapPin, Search, Send } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { Textarea } from "@food/components/ui/textarea"
 import { adminAPI } from "@food/api"
+import { isGoogleMapsLink } from "./manualOrderValidation"
 
 const PAYMENT_METHODS = [
   { value: "cash", label: "Cash on delivery" },
@@ -26,6 +27,7 @@ const emptyForm = {
   city: "",
   state: "",
   zipCode: "",
+  locationLink: "",
   amount: "",
   paymentMethod: "cash",
   riderEarning: "",
@@ -42,6 +44,7 @@ function formFromOrder(order) {
     city: address?.city || "",
     state: address?.state || "",
     zipCode: address?.zipCode || "",
+    locationLink: order?.locationLink || address?.locationLink || "",
     amount:
       order?.pricing?.total != null
         ? String(order.pricing.total)
@@ -143,6 +146,10 @@ export default function AssignDeliveryModal({
       setError("Delivery address is required")
       return
     }
+    if (form.locationLink.trim() && !isGoogleMapsLink(form.locationLink)) {
+      setError("Location link must be a Google Maps link (maps.app.goo.gl or google.com/maps)")
+      return
+    }
 
     setError("")
     onAssign({
@@ -160,6 +167,7 @@ export default function AssignDeliveryModal({
         paymentMethod: form.paymentMethod,
         riderEarning: form.riderEarning === "" ? undefined : form.riderEarning,
         deliveryInstructions: form.deliveryInstructions,
+        ...(form.locationLink.trim() ? { locationLink: form.locationLink.trim() } : {}),
       },
     })
   }
@@ -229,6 +237,33 @@ export default function AssignDeliveryModal({
                   onChange={setField("riderEarning")}
                   placeholder="Auto"
                 />
+              </Field>
+              <Field label="Customer location link (Google Maps)" className="sm:col-span-2">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      type="url"
+                      inputMode="url"
+                      value={form.locationLink}
+                      onChange={setField("locationLink")}
+                      maxLength={1000}
+                      placeholder="Paste the location the customer shared, e.g. https://maps.app.goo.gl/…"
+                      className="pl-9"
+                    />
+                  </div>
+                  {isGoogleMapsLink(form.locationLink) && (
+                    <a
+                      href={form.locationLink.trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Check <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-500">The rider gets a button to open this in Google Maps.</span>
               </Field>
               <Field label="Instructions for the rider" className="sm:col-span-2">
                 <Textarea

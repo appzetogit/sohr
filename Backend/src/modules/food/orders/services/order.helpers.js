@@ -74,6 +74,8 @@ export function sanitizeOrderForDeliveryPartner(orderDoc) {
   const deliveryInstructions = String(o.deliveryInstructions || "").trim();
   return {
     ...o,
+    // Customer's shared Google Maps location (WhatsApp orders), for an "open location" button.
+    customerLocationLink: String(o.deliveryAddress?.locationLink || ""),
     cookingNote,
     deliveryInstructions,
     note: deliveryInstructions,
@@ -497,6 +499,7 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     tripDurationMins,
     distanceKm: tripDistanceKm,
     customerAddress: customerAddressParts.length ? customerAddressParts.join(', ') : "",
+    customerLocationLink: String(order?.deliveryAddress?.locationLink || ""),
     customerName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
     customerPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
     customerCallUri: buildTelUri(
