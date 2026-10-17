@@ -215,7 +215,7 @@ export default function LandingPage() {
             {/* Sticky Header */}
             <header className="sticky top-0 w-full z-50 px-6 py-6 md:px-12 lg:px-20 flex items-center justify-between bg-[#FBF6EA]/80 backdrop-blur-md border-b border-slate-200/40 shrink-0">
               <div className="text-2xl font-black text-slate-900 tracking-tighter">
-                <span className="flex items-center gap-2.5"><img src="/sohr-logo.jpg" alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-[#B8862F]/60" /><span style={{ fontFamily: "'Cinzel', serif" }}>SOHR</span></span>
+                <span className="flex items-center gap-2.5"><img src="/sohr-logo.jpg?v=2" alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-[#B8862F]/60" /><span style={{ fontFamily: "'Cinzel', serif" }}>SOHR</span></span>
               </div>
               <button
                 onClick={() => setIsAboutOpen(false)}
@@ -369,7 +369,7 @@ export default function LandingPage() {
             {/* Sticky Header */}
             <header className="sticky top-0 w-full z-50 px-4 py-4 md:px-12 lg:px-20 flex items-center justify-between bg-[#FAF7F2]/90 backdrop-blur-md border-b border-slate-200/40 shrink-0">
               <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter">
-                <span className="flex items-center gap-2.5"><img src="/sohr-logo.jpg" alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-[#B8862F]/60" /><span style={{ fontFamily: "'Cinzel', serif" }}>SOHR</span></span>
+                <span className="flex items-center gap-2.5"><img src="/sohr-logo.jpg?v=2" alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-[#B8862F]/60" /><span style={{ fontFamily: "'Cinzel', serif" }}>SOHR</span></span>
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
                 <button
@@ -696,7 +696,7 @@ export default function LandingPage() {
             {/* Sticky Cyber Header */}
             <header className="sticky top-0 w-full z-50 px-6 py-6 md:px-12 lg:px-20 flex items-center justify-between bg-[#07080B]/90 backdrop-blur-md border-b border-slate-800/80 shrink-0">
               <div className="text-2xl font-black text-white tracking-tighter">
-                <span className="flex items-center gap-2.5"><img src="/sohr-logo.jpg" alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-[#B8862F]/60" /><span style={{ fontFamily: "'Cinzel', serif" }}>SOHR</span></span>
+                <span className="flex items-center gap-2.5"><img src="/sohr-logo.jpg?v=2" alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-[#B8862F]/60" /><span style={{ fontFamily: "'Cinzel', serif" }}>SOHR</span></span>
               </div>
               <button
                 onClick={() => setIsDeliveryOpen(false)}

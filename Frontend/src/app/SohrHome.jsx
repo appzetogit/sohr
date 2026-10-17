@@ -47,7 +47,7 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
       {/* Header */}
       <header className="relative z-50 max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 py-5 sm:py-6 flex items-center justify-between gap-3">
         <a href="/" className="flex items-center gap-3 min-w-0">
-          <img src="/sohr-logo.jpg" alt="" className="w-11 h-11 sm:w-12 sm:h-12 rounded-full ring-1 ring-[#C9973B]/60 object-cover shrink-0" />
+          <img src="/sohr-logo.jpg?v=2" alt="" className="w-11 h-11 sm:w-12 sm:h-12 rounded-full ring-1 ring-[#C9973B]/60 object-cover shrink-0" />
           <div className="leading-none min-w-0">
             <p className={`text-2xl sm:text-3xl font-bold tracking-wide ${GOLD_TEXT}`} style={SERIF}>SOHR</p>
             <p className="text-[9px] sm:text-[10px] tracking-[0.35em] text-[#C9B48A] mt-1">BY VYAS JI</p>
@@ -175,7 +175,7 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={fadeUp} className="relative mx-auto w-full max-w-[520px]">
             <div className="absolute -inset-3 rounded-[2.5rem] border border-[#C9973B]/30" />
             <div className="relative rounded-[2rem] overflow-hidden border border-[#C9973B]/40 shadow-[0_40px_100px_-30px_rgba(201,151,59,0.4)]">
-              <img src="/sohr-logo.jpg" alt="Master Chef Vyas Ji" className="w-full aspect-square object-cover" />
+              <img src="/sohr-logo.jpg?v=2" alt="Master Chef Vyas Ji" className="w-full aspect-square object-cover" />
             </div>
             <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:-right-6 bg-[#0A0806] border border-[#C9973B]/50 rounded-2xl px-5 py-4 flex items-center gap-3 shadow-2xl whitespace-nowrap">
               <ChefHat className="w-6 h-6 text-[#E0B45A]" />
@@ -289,7 +289,7 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
         <div className="max-w-[1400px] mx-auto grid gap-12 md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-3">
-              <img src="/sohr-logo.jpg" alt="" className="w-14 h-14 rounded-full ring-1 ring-[#C9973B]/60 object-cover" />
+              <img src="/sohr-logo.jpg?v=2" alt="" className="w-14 h-14 rounded-full ring-1 ring-[#C9973B]/60 object-cover" />
               <div className="leading-none">
                 <p className={`text-3xl font-bold ${GOLD_TEXT}`} style={SERIF}>SOHR</p>
                 <p className="text-[10px] tracking-[0.35em] text-[#C9B48A] mt-1">BY VYAS JI</p>

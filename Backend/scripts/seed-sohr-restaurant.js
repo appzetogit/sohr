@@ -16,7 +16,7 @@ if (!mongoUri) {
 
 const menu = JSON.parse(fs.readFileSync(new URL('./data/sohr-menu.json', import.meta.url), 'utf8'));
 const info = menu.restaurant;
-const LOGO_URL = 'https://sohr.in/sohr-logo.jpg';
+const LOGO_URL = 'https://sohr.in/sohr-logo.jpg?v=2';
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // Civil Lines, Prayagraj

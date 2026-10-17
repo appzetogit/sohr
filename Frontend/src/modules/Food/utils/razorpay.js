@@ -102,7 +102,7 @@ export const initRazorpayPayment = async (options) => {
       order_id: options.order_id,
       name: options.name || 'SOHR',
       description: options.description || 'Order Payment',
-      image: options.image || '/sohr-logo.jpg',
+      image: options.image || '/sohr-logo.jpg?v=2',
       prefill: options.prefill || {},
       notes: options.notes || {},
       theme: {

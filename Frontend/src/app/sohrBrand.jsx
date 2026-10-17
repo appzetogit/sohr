@@ -53,7 +53,7 @@ export function RotatingSeal({ className = "w-[300px] h-[300px] sm:w-[420px] sm:
       {/* The logo itself */}
       <div className="absolute inset-[13%] rounded-full p-[3px] bg-gradient-to-b from-[#FBE7A6] via-[#C9973B] to-[#6B4A14] shadow-[0_30px_80px_-20px_rgba(201,151,59,0.55)]">
         <img
-          src="/sohr-logo.jpg"
+          src="/sohr-logo.jpg?v=2"
           alt="SOHR by Vyas Ji logo"
           className="w-full h-full rounded-full object-cover"
         />

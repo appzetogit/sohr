@@ -685,7 +685,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                   onClick={() => navigate('/food/delivery/profile')}
                   className="w-10 h-10 rounded-full overflow-hidden cursor-pointer active:scale-95 transition-all bg-[#222]"
                 >
-                  <img src={profileImage || "https://sohr.in/sohr-logo.jpg"} alt="Profile" className="w-full h-full object-cover" />
+                  <img src={profileImage || "https://sohr.in/sohr-logo.jpg?v=2"} alt="Profile" className="w-full h-full object-cover" />
                 </div>
 
                 <button
