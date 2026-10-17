@@ -55,7 +55,7 @@ export default function RiderAppDownload() {
 
       <header className="relative z-10 mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-5 sm:px-8">
         <a href="/" className="flex items-center gap-3">
-          <img src="/sohr-logo.jpg" alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-[#C9973B]/60" />
+          <img src="/sohr-logo.jpg?v=2" alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-[#C9973B]/60" />
           <div className="leading-none">
             <p className={`sohr-serif text-2xl font-bold tracking-wide ${GOLD_TEXT}`}>SOHR</p>
             <p className="mt-1 text-[9px] tracking-[0.35em] text-[#C9B48A]">BY VYAS JI</p>
@@ -107,7 +107,7 @@ export default function RiderAppDownload() {
             transition={{ duration: 0.8 }}
             className="mx-auto flex w-full max-w-sm flex-col items-center rounded-[2rem] border border-[#C9973B]/30 bg-gradient-to-b from-[#17120A] to-[#0E0B07] p-8 text-center shadow-[0_30px_80px_-30px_rgba(201,151,59,0.4)]"
           >
-            <img src="/sohr-logo.jpg" alt="SOHR Rider app" className="h-28 w-28 rounded-3xl object-cover ring-2 ring-[#C9973B]/60" />
+            <img src="/sohr-logo.jpg?v=2" alt="SOHR Rider app" className="h-28 w-28 rounded-3xl object-cover ring-2 ring-[#C9973B]/60" />
             <p className={`sohr-serif mt-5 text-2xl font-bold ${GOLD_TEXT}`}>SOHR Rider</p>
             <p className="mt-1 text-xs tracking-[0.25em] text-[#A8987A]">DELIVERY PARTNER APP</p>
             <div className="mt-6 grid w-full grid-cols-2 gap-3 text-left">
