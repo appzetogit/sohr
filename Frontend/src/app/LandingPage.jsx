@@ -741,20 +741,10 @@ export default function LandingPage() {
 
                   <div className="flex flex-col sm:flex-row gap-4 pt-2">
                     <a
-                      href="https://apps.apple.com/in/app/switcheats-captain/id6766778164"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-3 bg-white text-slate-950 hover:bg-[#B8862F] hover:text-white px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md cursor-pointer text-center"
+                      href="/rider-app"
+                      className="flex items-center justify-center gap-3 bg-[#B8862F] text-white hover:bg-[#9C6E22] px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md cursor-pointer text-center"
                     >
-                      <Apple className="w-5 h-5" /> iOS App Store
-                    </a>
-                    <a
-                      href="https://play.google.com/store/apps/details?id=com.switcheats.delivery1"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-3 bg-slate-800 border border-slate-800 text-white hover:bg-[#B8862F] hover:border-[#B8862F] px-8 py-4 rounded-2xl font-bold transition-all duration-300 text-sm shadow-md cursor-pointer text-center"
-                    >
-                      <Play className="w-5 h-5" /> Android Play Store
+                      <Play className="w-5 h-5" /> Download the SOHR Rider app (Android)
                     </a>
                   </div>
                 </div>

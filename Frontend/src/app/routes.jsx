@@ -64,6 +64,7 @@ const RootEntryRoute = () => {
 
 
 const AdminRouter = lazy(() => import('../modules/Food/components/admin/AdminRouter'))
+const RiderAppDownload = lazy(() => import('./RiderAppDownload'))
 
 const AppRoutes = () => {
   const location = useLocation()
@@ -92,6 +93,16 @@ const AppRoutes = () => {
     <Routes>
       {/* Root → Master Landing Page */}
       <Route path="/" element={<RootEntryRoute />} />
+
+      {/* Public: delivery partners download the rider app (APK) */}
+      <Route
+        path="/rider-app"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <RiderAppDownload />
+          </Suspense>
+        }
+      />
 
       {/* Auth Module */}
 

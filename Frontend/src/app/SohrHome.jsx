@@ -252,8 +252,8 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
       <section className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 pb-24 lg:pb-32 grid md:grid-cols-2 gap-5">
         {[
           { Icon: Store, title: "Partner your kitchen", desc: "Bring your restaurant to SOHR and reach customers who love good vegetarian food.", cta: "Become a Restaurant Partner", onClick: onRestaurant },
-          { Icon: Bike, title: "Deliver with SOHR", desc: "Join our delivery team, choose your own hours and earn on every order.", cta: "Become a Delivery Partner", onClick: onDelivery },
-        ].map(({ Icon, title, desc, cta, onClick }, i) => (
+          { Icon: Bike, title: "Deliver with SOHR", desc: "Join our delivery team, choose your own hours and earn on every order.", cta: "Become a Delivery Partner", onClick: onDelivery, extraHref: "/rider-app", extraLabel: "Download the rider app" },
+        ].map(({ Icon, title, desc, cta, onClick, extraHref, extraLabel }, i) => (
           <motion.div
             key={title}
             custom={i} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }} variants={fadeUp}
@@ -266,6 +266,11 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
             <button onClick={onClick} className="relative mt-8 inline-flex items-center gap-2 text-sm font-semibold text-[#FBE7A6] hover:gap-3 transition-all cursor-pointer">
               {cta} <ArrowRight className="w-4 h-4" />
             </button>
+            {extraHref && (
+              <a href={extraHref} className="relative mt-3 flex items-center gap-2 text-sm font-medium text-[#C9B48A] hover:text-[#FBE7A6] transition-colors">
+                {extraLabel} <ArrowRight className="w-4 h-4" />
+              </a>
+            )}
           </motion.div>
         ))}
       </section>
