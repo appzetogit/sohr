@@ -19,9 +19,9 @@ const info = menu.restaurant;
 const LOGO_URL = 'https://sohr.in/sohr-logo.jpg?v=2';
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// Civil Lines, Prayagraj
-const LAT = 25.4513;
-const LNG = 81.8341;
+// The kitchen's exact pin, Civil Lines, Prayagraj (from the client's Google Maps link, 2026-10-19)
+const LAT = 25.4571614;
+const LNG = 81.8389807;
 
 // Delivery zone: a 16-point ring of ~15 km around Prayagraj city centre, covering
 // Civil Lines, Naini, Jhunsi, Phaphamau and the Bamrauli airport area.
