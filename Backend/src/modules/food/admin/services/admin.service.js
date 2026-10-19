@@ -5895,7 +5895,7 @@ export async function getDeliveryWithdrawals(query = {}) {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .populate('deliveryPartnerId', 'name phone profilePartnerId upiId upiQrCode')
+            .populate('deliveryPartnerId', 'name phone profilePartnerId upiId upiQrCode bankAccountHolderName bankAccountNumber bankIfscCode bankName')
             .lean(),
         FoodDeliveryWithdrawal.countDocuments(filter)
     ]);
@@ -5919,7 +5919,7 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
         ? 'approved'
         : String(status || '').toLowerCase();
 
-    if (!['approved', 'rejected', 'pending'].includes(normalizedStatus)) {
+    if (!['approved', 'paid', 'rejected', 'pending'].includes(normalizedStatus)) {
         throw new ValidationError('Invalid withdrawal status');
     }
 
@@ -5931,8 +5931,21 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
     const amount = Number(existing.amount || 0);
     const deliveryPartnerId = existing.deliveryPartnerId;
 
-    if (previousStatus !== 'pending' && previousStatus !== nextStatus) {
-        throw new ValidationError(`Cannot change a ${previousStatus} withdrawal request`);
+    // pending → approved → paid, or pending → paid in one step; pending → rejected.
+    // Money leaves the wallet when the request is first approved (or paid directly).
+    const allowed = {
+        pending: ['pending', 'approved', 'paid', 'rejected'],
+        approved: ['approved', 'paid'],
+        paid: ['paid'],
+        rejected: ['rejected'],
+    };
+    if (!(allowed[previousStatus] || []).includes(nextStatus)) {
+        throw new ValidationError(`Cannot change a ${previousStatus} withdrawal request to ${nextStatus}`);
+    }
+
+    const utr = String(transactionId || existing.transactionId || '').trim();
+    if (nextStatus === 'paid' && !utr) {
+        throw new ValidationError('Enter the bank / UPI transaction ID (UTR) to mark this as paid');
     }
 
     if (amount > 0 && previousStatus === 'pending' && nextStatus !== 'pending') {
@@ -5940,7 +5953,7 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
         const currentBalance = Number(wallet?.balance) || 0;
         const currentLocked = Number(wallet?.lockedAmount) || 0;
 
-        if (nextStatus === 'approved') {
+        if (nextStatus === 'approved' || nextStatus === 'paid') {
             if (currentBalance < amount) {
                 throw new ValidationError('Delivery wallet balance is lower than the requested amount');
             }
@@ -5966,11 +5979,34 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
     }
 
     existing.status = nextStatus;
-    existing.adminNote = adminNote;
-    existing.rejectionReason = rejectionReason;
-    existing.transactionId = transactionId;
-    existing.processedAt = nextStatus === 'pending' ? undefined : new Date();
+    if (adminNote !== undefined) existing.adminNote = adminNote;
+    if (rejectionReason !== undefined) existing.rejectionReason = rejectionReason;
+    if (utr) existing.transactionId = utr;
+    if (nextStatus === 'pending') existing.processedAt = undefined;
+    else if (!existing.processedAt) existing.processedAt = new Date();
+    if (nextStatus === 'paid' && !existing.paidAt) existing.paidAt = new Date();
     await existing.save();
+
+    if (previousStatus !== nextStatus && nextStatus !== 'pending') {
+        const messages = {
+            approved: `Your withdrawal of ₹${amount} is approved. The money is being sent to your bank.`,
+            paid: `₹${amount} has been sent to your bank. Reference: ${utr}`,
+            rejected: `Your withdrawal of ₹${amount} was rejected${existing.rejectionReason ? `: ${existing.rejectionReason}` : '.'}`,
+        };
+        try {
+            await sendNotificationToOwner({
+                ownerType: 'DELIVERY_PARTNER',
+                ownerId: String(deliveryPartnerId),
+                payload: {
+                    title: 'Withdrawal update',
+                    body: messages[nextStatus],
+                    data: { type: 'WITHDRAWAL_UPDATE', withdrawalId: String(existing._id), status: nextStatus }
+                }
+            });
+        } catch {
+            // A failed push must not undo the payout bookkeeping.
+        }
+    }
 
     return FoodDeliveryWithdrawal.findById(id)
         .populate('deliveryPartnerId', 'name phone profilePartnerId')

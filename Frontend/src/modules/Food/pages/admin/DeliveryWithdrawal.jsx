@@ -17,7 +17,8 @@ const debugError = (...args) => {}
 const TABS = [
   { key: "All", label: "All" },
   { key: "Pending", label: "Pending" },
-  { key: "Approved", label: "Approved" },
+  { key: "Approved", label: "Approved (sending)" },
+  { key: "Paid", label: "Paid" },
   { key: "Rejected", label: "Rejected" },
 ]
 
@@ -31,6 +32,9 @@ export default function DeliveryWithdrawal() {
   const [processingAction, setProcessingAction] = useState(null)
   const [rejectionReason, setRejectionReason] = useState("")
   const [showRejectModal, setShowRejectModal] = useState(false)
+  // "Mark as paid": the admin sent the money outside the app and records the UTR here.
+  const [showPaidModal, setShowPaidModal] = useState(false)
+  const [utr, setUtr] = useState("")
 
   useEffect(() => {
     fetchRequests()
@@ -80,7 +84,8 @@ export default function DeliveryWithdrawal() {
   }, [requests, searchQuery])
 
   const getStatusBadge = (status) => {
-    if (status === "Approved" || status === "Processed") return "bg-green-100 text-green-700"
+    if (status === "Paid") return "bg-green-100 text-green-700"
+    if (status === "Approved" || status === "Processed") return "bg-sky-100 text-sky-700"
     if (status === "Pending") return "bg-amber-100 text-amber-700"
     if (status === "Rejected") return "bg-red-100 text-red-700"
     return "bg-slate-100 text-slate-700"
@@ -107,6 +112,33 @@ export default function DeliveryWithdrawal() {
       const msg = error.response?.data?.message || error.message || "Failed to approve withdrawal request"
       debugError("Error approving delivery withdrawal:", error?.response?.data || error, msg)
       toast.error(msg)
+    } finally {
+      setProcessingAction(null)
+    }
+  }
+
+  const handleMarkPaid = async (id) => {
+    if (!utr.trim()) {
+      toast.error("Enter the bank / UPI transaction ID (UTR)")
+      return
+    }
+    try {
+      setProcessingAction(id)
+      const response = await adminAPI.updateDeliveryWithdrawalStatus(id, {
+        status: "Paid",
+        transactionId: utr.trim(),
+      })
+      if (response?.data?.success) {
+        toast.success("Marked as paid. The rider has been notified.")
+        setShowPaidModal(false)
+        setUtr("")
+        setSelectedRequest(null)
+        fetchRequests()
+      } else {
+        toast.error(response?.data?.message || "Failed to mark as paid")
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to mark as paid")
     } finally {
       setProcessingAction(null)
     }
@@ -290,6 +322,20 @@ export default function DeliveryWithdrawal() {
                                 </button>
                               </>
                             )}
+                            {(req.status === "Pending" || req.status === "Approved") && (
+                              <button
+                                onClick={() => {
+                                  setSelectedRequest(req)
+                                  setUtr("")
+                                  setShowPaidModal(true)
+                                }}
+                                disabled={processingAction === req.id}
+                                className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                title="Record the bank / UPI transfer"
+                              >
+                                Mark paid
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -375,6 +421,12 @@ export default function DeliveryWithdrawal() {
                     <p className="text-sm font-medium text-slate-900 mt-1">{formatDate(selectedRequest.processedAt)}</p>
                   </div>
                 )}
+                {selectedRequest.transactionId && (
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Transaction ID (UTR)</label>
+                    <p className="text-sm font-medium text-slate-900 mt-1">{selectedRequest.transactionId}</p>
+                  </div>
+                )}
                 {selectedRequest.status === "Rejected" && selectedRequest.processedAt && (
                   <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase">Rejected at</label>
@@ -403,6 +455,62 @@ export default function DeliveryWithdrawal() {
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-all"
               >
                 Close
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Mark as paid modal */}
+        <Dialog open={showPaidModal} onOpenChange={setShowPaidModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Mark withdrawal as paid</DialogTitle>
+            </DialogHeader>
+            {selectedRequest && (
+              <div className="space-y-3 text-sm">
+                <p className="text-slate-600">
+                  Send <span className="font-bold text-slate-900">₹{selectedRequest.amount}</span> to{" "}
+                  <span className="font-semibold text-slate-900">{selectedRequest.deliveryName}</span>, then enter the
+                  transaction reference.
+                </p>
+                <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                  {selectedRequest.upiId && <p>UPI: <span className="font-semibold">{selectedRequest.upiId}</span></p>}
+                  {selectedRequest.bankDetails?.accountNumber && (
+                    <p>
+                      A/C: <span className="font-semibold">{selectedRequest.bankDetails.accountNumber}</span> · IFSC:{" "}
+                      <span className="font-semibold">{selectedRequest.bankDetails.ifscCode || "N/A"}</span> ·{" "}
+                      {selectedRequest.bankDetails.accountHolderName || ""}
+                    </p>
+                  )}
+                  {!selectedRequest.upiId && !selectedRequest.bankDetails?.accountNumber && (
+                    <p className="text-red-600">This rider has not added bank or UPI details.</p>
+                  )}
+                </div>
+                <label className="block text-sm font-medium text-slate-700">
+                  Transaction ID / UTR
+                  <input
+                    value={utr}
+                    onChange={(e) => setUtr(e.target.value)}
+                    maxLength={60}
+                    placeholder="e.g. 427812345678"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+            )}
+            <DialogFooter>
+              <button
+                onClick={() => setShowPaidModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => selectedRequest && handleMarkPaid(selectedRequest.id)}
+                disabled={processingAction === selectedRequest?.id}
+                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
+              >
+                {processingAction === selectedRequest?.id ? "Saving…" : "Mark as paid"}
               </button>
             </DialogFooter>
           </DialogContent>

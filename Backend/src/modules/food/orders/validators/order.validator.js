@@ -327,6 +327,11 @@ export function validateManualOrderDto(body) {
                 .trim()
                 .regex(/^[a-f\d]{24}$/i, 'Invalid delivery partner')
                 .optional(),
+            // 'nearby' offers the order to every online rider near the restaurant
+            // (auto-dispatch); 'admin' (default) waits for the admin to pick one.
+            dispatchMode: z.enum(['admin', 'nearby']).optional(),
+            // true: `amount` is the final bill and already includes GST.
+            amountIncludesGst: z.boolean().optional(),
         })
         .refine((d) => (d.lineItems && d.lineItems.length) || (d.items && d.items.length), {
             message: 'Order items required',

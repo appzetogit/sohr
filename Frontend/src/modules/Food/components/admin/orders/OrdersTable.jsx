@@ -297,7 +297,22 @@ export default function OrdersTable({
                 )}
                 {visibleColumns.orderId && (
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-slate-900">{order.orderId}</span>
+                    <div className="flex flex-col gap-1">
+                      {order.displayNumber && (
+                        <span className="text-lg font-extrabold leading-none text-slate-900">
+                          #{order.displayNumber}
+                        </span>
+                      )}
+                      <span className="text-xs font-medium text-slate-500">{order.orderId}</span>
+                      {order.pickupPin && (
+                        <span
+                          className="w-fit rounded bg-amber-100 px-1.5 py-0.5 text-xs font-bold tracking-widest text-amber-800"
+                          title="The rider must show this PIN at pickup. Hand the food over only if it matches."
+                        >
+                          PIN {order.pickupPin}
+                        </span>
+                      )}
+                    </div>
                   </td>
                 )}
                 {visibleColumns.orderDate && (

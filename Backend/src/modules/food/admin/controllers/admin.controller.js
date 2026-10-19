@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import * as adminService from '../services/admin.service.js';
 import * as featureSettingsService from '../services/featureSettings.service.js';
+import * as riderReportService from '../services/riderReport.service.js';
 import { validateCategoryListQuery, validateCategoryRejectDto, validateCategoryUpsertDto } from '../validators/category.validator.js';
 import { validateCreateOfferDto, validateUpdateOfferCartVisibilityDto } from '../validators/offer.validator.js';
 import { validateAddDeliveryBonusDto } from '../validators/deliveryBonus.validator.js';
@@ -1388,6 +1389,16 @@ export async function updateSupportTicket(req, res, next) {
 }
 
 // ----- Delivery partners -----
+/** Registered / active / inactive riders (?city=Prayagraj) for the Riders report page. */
+export async function getRiderReport(req, res, next) {
+    try {
+        const data = await riderReportService.getRiderReport(req.query);
+        res.status(200).json({ success: true, message: 'Rider report fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export async function getDeliveryPartners(req, res, next) {
     try {
         const data = await adminService.getDeliveryPartners(req.query);

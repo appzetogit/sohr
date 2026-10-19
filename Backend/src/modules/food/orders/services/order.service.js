@@ -1253,6 +1253,8 @@ export async function resyncState(userId, role) {
 
     if (order) {
       const out = normalizeOrderForClient(order);
+      // The pickup PIN is between the kitchen and the rider; the customer never needs it.
+      delete out.pickupPin;
       // Re-add handover OTP if order is picked up
       if (
         (order.deliveryState?.currentPhase === "at_drop" || order.orderStatus === "picked_up") &&
@@ -2608,6 +2610,8 @@ export async function createManualOrderAdmin(dto, adminId) {
     }
   }
 
+  const broadcastToNearby = !deliveryPartnerId && dto.dispatchMode === 'nearby';
+
   const customerPhone = String(dto.customerPhone).trim();
   const customerName = String(dto.customerName || '').trim();
   const user = await findOrCreateUserByPhone({ phone: customerPhone });
@@ -2640,15 +2644,22 @@ export async function createManualOrderAdmin(dto, adminId) {
   // discount, above it is a delivery charge. Either way pricing still adds up.
   // GST (Fee Settings → GST rate, e.g. 5%) is charged on the agreed amount, rounded to
   // the rupee like the customer app, and added to the bill the rider collects.
+  // With amountIncludesGst the admin typed the final bill: GST is taken out of it
+  // (amount = base + base*rate) instead of added on top, so the customer pays exactly
+  // what was agreed on WhatsApp.
   const gstRate = await currentGstRate();
-  const tax = Math.round((amount * gstRate) / 100);
+  const includesGst = dto.amountIncludesGst === true;
+  const tax = includesGst
+    ? Math.round(amount - amount / (1 + gstRate / 100))
+    : Math.round((amount * gstRate) / 100);
+  const baseAmount = includesGst ? roundMoney(amount - tax) : amount;
   const pricing = {
     subtotal: itemsTotal,
-    discount: itemsTotal > amount ? roundMoney(itemsTotal - amount) : 0,
-    deliveryFee: amount > itemsTotal ? roundMoney(amount - itemsTotal) : 0,
+    discount: itemsTotal > baseAmount ? roundMoney(itemsTotal - baseAmount) : 0,
+    deliveryFee: baseAmount > itemsTotal ? roundMoney(baseAmount - itemsTotal) : 0,
     tax,
     gstRate,
-    total: roundMoney(amount + tax),
+    total: roundMoney(baseAmount + tax),
     currency: 'INR',
     distanceKm: null,
     roadDistanceKm: null,
@@ -2698,7 +2709,7 @@ export async function createManualOrderAdmin(dto, adminId) {
       amountDue: pricing.total,
     },
     orderStatus: 'confirmed',
-    dispatch: { status: 'unassigned', assignedBy: 'ADMIN' },
+    dispatch: { status: 'unassigned', assignedBy: broadcastToNearby ? 'AUTO' : 'ADMIN' },
     statusHistory: [
       {
         at: new Date(),
@@ -2719,6 +2730,14 @@ export async function createManualOrderAdmin(dto, adminId) {
 
   if (deliveryPartnerId) {
     return assignDeliveryPartnerAdmin(order._id.toString(), { deliveryPartnerId }, adminId);
+  }
+
+  if (broadcastToNearby) {
+    // Same background hunt as customer-app orders: offers go to every online rider
+    // near the restaurant, widening the radius each round until one accepts.
+    void dispatchService.tryAutoAssign(order._id).catch((err) => {
+      logger.warn(`Manual order ${order._id} auto-dispatch failed: ${err?.message || err}`);
+    });
   }
 
   return normalizeOrderForClient(order);

@@ -188,7 +188,11 @@ const deliveryStateSchema = new mongoose.Schema(
         reachedPickupAt: { type: Date, default: null },
         reachedDropAt: { type: Date, default: null },
         pickedUpAt: { type: Date, default: null },
-        deliveredAt: { type: Date, default: null }
+        deliveredAt: { type: Date, default: null },
+        /** Photo the rider takes of the bill / packed food at pickup. */
+        billImageUrl: { type: String, default: '' },
+        /** Photo the rider takes at the door when handing the order over. */
+        deliveryImageUrl: { type: String, default: '' }
     },
     { _id: false }
 );
@@ -355,6 +359,15 @@ const orderSchema = new mongoose.Schema(
         /** Restaurant ↔ customer driving distance (km) for delivery-partner offer UI */
         tripDistanceKm: { type: Number, default: null, min: 0 },
         tripDurationMins: { type: Number, default: null, min: 0 },
+        /** Short per-day counter shown on the kitchen screen and the rider app, e.g. "006". Resets every day (IST). */
+        displayNumber: { type: String, default: '' },
+        /** IST calendar day `displayNumber` belongs to, YYYY-MM-DD. */
+        orderDay: { type: String, default: '' },
+        /**
+         * 4-digit code the rider shows at the counter; staff match it against the
+         * admin panel before handing food over. Only sent to the rider once they accept.
+         */
+        pickupPin: { type: String, default: '' },
         /** Plain 4-digit OTP for handover; cleared after successful verify (never expose to partner in API responses). */
         deliveryOtp: { type: String, default: '', select: false },
         deliveryVerification: {
@@ -402,6 +415,21 @@ orderSchema.index({ 'dispatch.deliveryPartnerId': 1, 'dispatch.status': 1, updat
 orderSchema.index({ 'payment.status': 1, createdAt: -1 });
 orderSchema.index({ 'payment.method': 1, createdAt: -1 });
 
+/** Per-day order sequences (`daily:YYYY-MM-DD` → last number handed out). */
+const orderCounterSchema = new mongoose.Schema(
+    {
+        key: { type: String, required: true, unique: true },
+        seq: { type: Number, default: 0 },
+    },
+    { collection: 'food_order_counters' }
+);
+export const FoodOrderCounter = mongoose.model('FoodOrderCounter', orderCounterSchema);
+
+/** Today's date in India (UTC+5:30) as YYYY-MM-DD; the daily order number resets at IST midnight. */
+function istDay(now = Date.now()) {
+    return new Date(now + 330 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 orderSchema.pre('save', async function (next) {
     try {
         if (!this.order_id) {
@@ -425,6 +453,20 @@ orderSchema.pre('save', async function (next) {
         // Synchronize camelCase alias to satisfy unique index 'orderId_1'
         if (this.order_id) {
             this.orderId = this.order_id;
+        }
+        if (this.isNew && !this.displayNumber) {
+            // Atomic per-day sequence, so two orders created at once never share a number.
+            const orderDay = istDay();
+            const counter = await FoodOrderCounter.findOneAndUpdate(
+                { key: `daily:${orderDay}` },
+                { $inc: { seq: 1 } },
+                { upsert: true, new: true },
+            ).lean();
+            this.orderDay = orderDay;
+            this.displayNumber = String(counter.seq).padStart(3, '0');
+        }
+        if (this.isNew && !this.pickupPin) {
+            this.pickupPin = String(Math.floor(1000 + Math.random() * 9000));
         }
         next();
     } catch (err) {

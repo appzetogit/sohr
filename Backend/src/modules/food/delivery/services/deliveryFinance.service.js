@@ -67,7 +67,7 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
             { 
                 $group: { 
                     _id: null, 
-                    totalWithdrawn: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, '$amount', 0] } },
+                    totalWithdrawn: { $sum: { $cond: [{ $in: ['$status', ['approved', 'paid']] }, '$amount', 0] } },
                     pendingWithdrawals: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amount', 0] } }
                 } 
             }
@@ -138,7 +138,11 @@ export const getDeliveryPartnerWalletEnhanced = async (deliveryPartnerId) => {
             id: w._id,
             type: 'withdrawal',
             amount: w.amount,
-            status: w.status === 'pending' ? 'Pending' : (w.status === 'approved' ? 'Completed' : 'Rejected'),
+            // Approved = checked by admin, transfer in progress; Paid = sent (UTR in transactionId).
+            status: { pending: 'Pending', approved: 'Processing', paid: 'Completed' }[w.status] || 'Rejected',
+            withdrawalStatus: w.status,
+            transactionId: w.transactionId || '',
+            rejectionReason: w.rejectionReason || '',
             date: w.createdAt,
             description: `Withdrawal Request - ${w.paymentMethod}`,
             payoutMethod: w.paymentMethod

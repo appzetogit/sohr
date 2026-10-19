@@ -129,6 +129,7 @@ export function buildIncomingOrderPushData(order, payload, acceptanceDeadlineAt)
     orderId: s(order?._id),
     orderMongoId: s(order?._id),
     orderDisplayId: s(order?.order_id || order?._id),
+    displayNumber: s(order?.displayNumber),
     restaurantName: s(payload?.restaurantName),
     restaurantAddress: s(payload?.restaurantAddress),
     customerAddress: s(payload?.customerAddress),

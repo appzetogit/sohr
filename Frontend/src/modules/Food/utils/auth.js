@@ -196,6 +196,11 @@ export async function ensureValidAccessToken(module) {
 
         localStorage.setItem(`${module}_accessToken`, newAccessToken);
         localStorage.setItem(`${module}_authenticated`, "true");
+        // Sliding session: the server renews the refresh token once it is a day old.
+        const newRefreshToken = data?.data?.refreshToken || data?.refreshToken;
+        if (newRefreshToken && newRefreshToken !== refreshToken) {
+          localStorage.setItem(`${module}_refreshToken`, newRefreshToken);
+        }
 
         if (typeof window !== "undefined") {
           window.dispatchEvent(

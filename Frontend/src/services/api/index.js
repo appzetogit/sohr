@@ -424,6 +424,12 @@ export const adminAPI = {
     apiClient.delete(`/food/admin/sub-admins/${String(id)}`, { contextModule: "admin" }),
   getSubAdminPermissionCatalog: () =>
     apiClient.get("/food/admin/sub-admins/permission-catalog", { contextModule: "admin" }),
+  /** Registered / active / inactive riders, optionally for one city (Riders Report page) */
+  getRiderReport: (params) =>
+    apiClient.get("/food/admin/delivery/partners/report", {
+      params,
+      contextModule: "admin",
+    }),
   /** List approved delivery partners (Deliveryman List page) */
   getDeliveryPartners: (params) =>
     apiClient.get("/food/admin/delivery/partners", {

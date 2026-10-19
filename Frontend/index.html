@@ -11,6 +11,16 @@
     <meta property="og:description" content="व्यास जी के हाथों से बना हुआ Tasty खाना. Pure veg, freshly cooked, delivered all over India." />
     <meta property="og:image" content="/sohr-logo.jpg?v=2" />
     <title>SOHR by Vyas Ji</title>
+    <script>
+      // The admin panel can be installed as its own app ("Add to Home screen" /
+      // "Install app"). Only offered on /admin so customers aren't prompted.
+      if (location.pathname.indexOf("/admin") === 0) {
+        var m = document.createElement("link");
+        m.rel = "manifest";
+        m.href = "/admin.webmanifest";
+        document.head.appendChild(m);
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Tiro+Devanagari+Hindi&family=Inter:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">

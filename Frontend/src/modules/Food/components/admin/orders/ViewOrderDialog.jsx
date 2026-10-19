@@ -389,6 +389,29 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
             </div>
           )}
 
+          {/* Photo the rider took at the customer's door */}
+          {order.deliveryState?.deliveryImageUrl && (
+            <div className="border-t border-slate-200 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <Package className="w-4 h-4 text-emerald-600" />
+                Delivery Photo (taken at handover)
+              </h3>
+              <a
+                href={order.deliveryState.deliveryImageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full max-w-2xl overflow-hidden rounded-xl border-2 border-slate-300 bg-white shadow-sm"
+              >
+                <img
+                  src={order.deliveryState.deliveryImageUrl}
+                  alt="Delivered order"
+                  className="mx-auto block h-auto max-h-[500px] w-full object-contain"
+                  loading="lazy"
+                />
+              </a>
+            </div>
+          )}
+
           {/* Bill Image (Captured by Delivery Boy) */}
           {(order.billImageUrl || order.billImage || order.deliveryState?.billImageUrl) && (
             <div className="border-t border-slate-200 pt-4">

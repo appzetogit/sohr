@@ -61,7 +61,9 @@ const DELIVERY_ORDER_BASE_SELECT = [
   'tripDurationMins',
   'lastRiderLocation',
   'deliveryFleet',
-  'ratings'
+  'ratings',
+  'displayNumber',
+  'pickupPin'
 ].join(' ');
 
 const DELIVERY_USER_POPULATE = {
@@ -895,7 +897,22 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
   return order.toObject();
 }
 
-export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImageUrl) {
+/**
+ * Proof photos must be files our own upload endpoint stored (UPLOAD_BASE_URL), so a
+ * rider app can't attach an arbitrary external link to an order.
+ */
+function ownUploadUrl(value) {
+  const url = String(value || '').trim();
+  if (!url || url.length > 500) return '';
+  const base = String(config.uploadBaseUrl || '').replace(/\/+$/, '');
+  if (base && url.startsWith(`${base}/`)) return url;
+  // Relative paths from the same upload store (/uploads/...).
+  if (url.startsWith('/uploads/')) return url;
+  return '';
+}
+
+export async function confirmPickupDelivery(orderId, deliveryPartnerId, rawBillImageUrl) {
+  const billImageUrl = ownUploadUrl(rawBillImageUrl);
   const identity = buildOrderIdentityFilter(orderId);
   const order = await FoodOrder.findOne(identity).select('+deliveryOtp');
   if (!order) throw new NotFoundError('Order not found');
@@ -916,7 +933,7 @@ export async function confirmPickupDelivery(orderId, deliveryPartnerId, billImag
     currentPhase: 'en_route_to_delivery',
     status: 'picked_up',
     pickedUpAt: new Date(),
-    billImageUrl,
+    ...(billImageUrl ? { billImageUrl } : {}),
   };
 
   if (config.deliveryDropOtpRequired) {
@@ -1160,6 +1177,8 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
     currentPhase: 'delivered',
     status: 'delivered',
     deliveredAt: new Date(),
+    // Photo taken at the door (optional; older app builds don't send one).
+    ...(ownUploadUrl(body.deliveryImageUrl) ? { deliveryImageUrl: ownUploadUrl(body.deliveryImageUrl) } : {}),
   };
 
   if (ratings) {

@@ -43,6 +43,7 @@ export function generateFourDigitDeliveryOtp() {
 export function sanitizeOrderForExternal(orderDoc) {
   const o = orderDoc?.toObject ? orderDoc.toObject() : { ...(orderDoc || {}) };
   delete o.deliveryOtp;
+  delete o.pickupPin;
   const dv = o.deliveryVerification;
   if (dv && dv.dropOtp != null) {
     const d = dv.dropOtp;
@@ -61,7 +62,13 @@ export function sanitizeOrderForExternal(orderDoc) {
 }
 
 export function sanitizeOrderForDeliveryPartner(orderDoc) {
+  const raw = orderDoc?.toObject ? orderDoc.toObject() : orderDoc || {};
   const o = sanitizeOrderForExternal(orderDoc);
+  // The pickup PIN proves at the counter that this rider owns the order, so only the
+  // rider who accepted it ever sees it (never riders who were merely offered it).
+  if (raw.dispatch?.status === "accepted" && raw.pickupPin) {
+    o.pickupPin = String(raw.pickupPin);
+  }
   // The gate is only stored at pickup, so before that tell the rider app up front
   // whether a handover code will be needed (it decides whether to show the code screen).
   if (o.deliveryVerification?.dropOtp == null) {
@@ -500,6 +507,8 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     distanceKm: tripDistanceKm,
     customerAddress: customerAddressParts.length ? customerAddressParts.join(', ') : "",
     customerLocationLink: String(order?.deliveryAddress?.locationLink || ""),
+    // Short daily number ("006") the kitchen calls out; the PIN is only sent after accept.
+    displayNumber: order?.displayNumber || "",
     customerName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
     customerPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
     customerCallUri: buildTelUri(

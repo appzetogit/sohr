@@ -14,7 +14,9 @@ const foodDeliveryWithdrawalSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'approved', 'rejected'],
+        // pending (rider asked) → approved (checked, money deducted from wallet, transfer
+        // in progress) → paid (sent; transactionId holds the bank UTR). pending → rejected.
+        enum: ['pending', 'approved', 'paid', 'rejected'],
         default: 'pending',
         index: true
     },
@@ -33,8 +35,9 @@ const foodDeliveryWithdrawalSchema = new mongoose.Schema({
     adminNote: String,
     rejectionReason: String,
     transactionId: String, // Final bank transaction reference from admin
-    processedAt: Date
-}, { 
+    processedAt: Date,
+    paidAt: Date
+}, {
     collection: 'food_delivery_withdrawals', 
     timestamps: true 
 });

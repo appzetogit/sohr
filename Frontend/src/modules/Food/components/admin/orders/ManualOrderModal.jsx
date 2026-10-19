@@ -311,6 +311,9 @@ function OrderItemsPicker({ menu, menuLoading, cart, setCart, errors = {} }) {
   )
 }
 
+// Rider-picker value for "broadcast to every online rider nearby" (auto-dispatch).
+const NEARBY_RIDERS = "__nearby__"
+
 /** Optional rider choice. Riders already holding orders can still be picked (batching). */
 function RiderPicker({ partners, loading, selectedId, onSelect }) {
   const [search, setSearch] = useState("")
@@ -359,6 +362,15 @@ function RiderPicker({ partners, loading, selectedId, onSelect }) {
       </div>
       <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
         {option(
+          NEARBY_RIDERS,
+          <span className="text-sm text-slate-700">
+            <span className="font-semibold">Send to all nearby riders</span>
+            <span className="block text-xs text-slate-500">
+              Every online rider near the restaurant gets the order; the first to accept takes it
+            </span>
+          </span>,
+        )}
+        {option(
           "",
           <span className="text-sm text-slate-700">
             <span className="font-semibold">Assign later</span>
@@ -406,10 +418,13 @@ function RiderPicker({ partners, loading, selectedId, onSelect }) {
 }
 
 /** What the customer will pay: matches the server (GST rounded to the rupee). */
-function BillSummary({ itemsTotal, amount, gstRate }) {
-  const base = Number(amount)
-  if (!Number.isFinite(base) || base <= 0) return null
-  const gst = Math.round((base * gstRate) / 100)
+function BillSummary({ itemsTotal, amount, gstRate, includesGst }) {
+  const entered = Number(amount)
+  if (!Number.isFinite(entered) || entered <= 0) return null
+  const gst = includesGst
+    ? Math.round(entered - entered / (1 + gstRate / 100))
+    : Math.round((entered * gstRate) / 100)
+  const base = includesGst ? Math.round((entered - gst) * 100) / 100 : entered
   const diff = Math.round((base - itemsTotal) * 100) / 100
   const row = (label, value, strong = false) => (
     <div className={`flex justify-between ${strong ? "border-t border-slate-200 pt-2 text-base font-bold text-slate-900" : "text-slate-600"}`}>
@@ -422,8 +437,9 @@ function BillSummary({ itemsTotal, amount, gstRate }) {
       {itemsTotal > 0 && row("Items", `₹${itemsTotal}`)}
       {itemsTotal > 0 && diff < 0 && row("Discount", `− ₹${-diff}`)}
       {itemsTotal > 0 && diff > 0 && row("Delivery charge", `₹${diff}`)}
+      {gstRate > 0 && row("Food amount", `₹${base}`)}
       {gstRate > 0 && row(`GST ${gstRate}%`, `₹${gst}`)}
-      {row("Customer pays", `₹${base + gst}`, true)}
+      {row(gstRate > 0 ? "Customer pays (incl. GST)" : "Customer pays", `₹${Math.round((base + gst) * 100) / 100}`, true)}
     </div>
   )
 }
@@ -446,6 +462,8 @@ export default function ManualOrderModal({
   const [errors, setErrors] = useState({})
   // GST % from Fee Settings (admin panel); added on top of the order amount.
   const [gstRate, setGstRate] = useState(0)
+  // On when the amount typed is the final bill the customer agreed to (GST inside it).
+  const [amountIncludesGst, setAmountIncludesGst] = useState(false)
   // Errors are shown once the admin has tried to submit, then kept live as they fix them.
   const [attempted, setAttempted] = useState(false)
   const bodyRef = useRef(null)
@@ -460,6 +478,7 @@ export default function ManualOrderModal({
     setCart([])
     setAmountTouched(false)
     setDeliveryPartnerId("")
+    setAmountIncludesGst(false)
     setErrors({})
     setAttempted(false)
   }, [isOpen, restaurantOptions])
@@ -585,7 +604,12 @@ export default function ManualOrderModal({
       ...(form.riderEarning === "" ? {} : { riderEarning: Number(form.riderEarning) }),
       deliveryInstructions: clean(form.deliveryInstructions),
       ...(form.locationLink.trim() ? { locationLink: form.locationLink.trim() } : {}),
-      ...(deliveryPartnerId ? { deliveryPartnerId } : {}),
+      ...(deliveryPartnerId === NEARBY_RIDERS
+        ? { dispatchMode: "nearby" }
+        : deliveryPartnerId
+          ? { deliveryPartnerId }
+          : {}),
+      ...(gstRate > 0 ? { amountIncludesGst } : {}),
     })
   }
 
@@ -780,7 +804,13 @@ export default function ManualOrderModal({
 
           <Section title="Payment">
             <Field
-              label={gstRate ? "Order amount before GST (₹)" : "Order amount (₹)"}
+              label={
+                gstRate
+                  ? amountIncludesGst
+                    ? "Final bill incl. GST (₹)"
+                    : "Food amount, GST added on top (₹)"
+                  : "Order amount (₹)"
+              }
               name="amount"
               required
               error={errors.amount}
@@ -826,7 +856,23 @@ export default function ManualOrderModal({
                 className={inputClass(errors.riderEarning)}
               />
             </Field>
-            <BillSummary itemsTotal={cartTotal} amount={form.amount} gstRate={gstRate} />
+            {gstRate > 0 && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={amountIncludesGst}
+                  onChange={(e) => setAmountIncludesGst(e.target.checked)}
+                  className="h-4 w-4 accent-emerald-600"
+                />
+                Amount already includes {gstRate}% GST (customer was quoted a final price)
+              </label>
+            )}
+            <BillSummary
+              itemsTotal={cartTotal}
+              amount={form.amount}
+              gstRate={gstRate}
+              includesGst={amountIncludesGst}
+            />
           </Section>
         </div>
 
@@ -846,7 +892,11 @@ export default function ManualOrderModal({
               className="bg-emerald-600 text-white hover:bg-emerald-700"
             >
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              {deliveryPartnerId ? "Create & send to rider" : "Create order"}
+              {deliveryPartnerId === NEARBY_RIDERS
+                ? "Create & send to nearby riders"
+                : deliveryPartnerId
+                  ? "Create & send to rider"
+                  : "Create order"}
             </Button>
           </div>
         </div>

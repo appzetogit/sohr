@@ -978,5 +978,26 @@ export const refreshAccessToken = async (token) => {
     ...(payload.adminType ? { adminType: payload.adminType } : {}),
   });
 
-  return { accessToken: newAccessToken, refreshToken: token };
+  // Sliding session: once a refresh token is a day old, hand out a fresh one so anyone
+  // who keeps using the app stays signed in, instead of a hard logout N days after
+  // login. The old token is left to expire on its own rather than deleted, so two tabs
+  // refreshing at the same moment can't sign each other out.
+  let refreshToken = token;
+  const issuedAtMs = Number(payload?.iat) * 1000;
+  if (Number.isFinite(issuedAtMs) && Date.now() - issuedAtMs > 24 * 60 * 60 * 1000) {
+    const { iat, exp, jti, ...claims } = payload;
+    refreshToken = signRefreshToken({
+      ...claims,
+      ...(tokenVersion !== undefined ? { tokenVersion } : {}),
+    });
+    await FoodRefreshToken.create({
+      userId: stored.userId,
+      token: refreshToken,
+      device: stored.device || null,
+      ipAddress: stored.ipAddress || null,
+      expiresAt: new Date(Date.now() + ms(config.jwtRefreshExpiresIn || "7d")),
+    });
+  }
+
+  return { accessToken: newAccessToken, refreshToken };
 };

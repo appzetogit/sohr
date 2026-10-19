@@ -138,6 +138,7 @@ export const adminSidebarMenu = [
     items: [
       { type: "link", label: "Delivery & Platform Fee", path: "/admin/food/fee-settings", icon: "DollarSign" },
       { type: "link", label: "Payment Gateway (Razorpay)", path: "/admin/food/payment-gateway", icon: "CreditCard" },
+      { type: "link", label: "Riders Report", path: "/admin/food/delivery-partners/report", icon: "Users" },
       { type: "link", label: "Delivery Withdrawal", path: "/admin/food/delivery-withdrawal", icon: "Wallet" },
       { type: "link", label: "Delivery boy Wallet", path: "/admin/food/delivery-boy-wallet", icon: "PiggyBank" },
       { type: "link", label: "Delivery Emergency Help", path: "/admin/food/delivery-emergency-help", icon: "Phone" },
