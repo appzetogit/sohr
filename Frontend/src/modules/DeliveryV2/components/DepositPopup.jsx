@@ -1,7 +1,7 @@
 ﻿import { useState } from "react"
 import { IndianRupee, Loader2 } from "lucide-react"
 import { deliveryAPI } from "@food/api"
-import { initRazorpayPayment } from "@food/utils/razorpay"
+import { initCashfreePayment } from "@food/utils/cashfree"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
 
@@ -36,41 +36,22 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
       setLoading(true)
       const orderRes = await deliveryAPI.createDepositOrder(amt)
       const data = orderRes?.data?.data
-      const rp = data?.razorpay
-      if (!rp?.orderId || !rp?.key) {
+      const cf = data?.cashfree
+      if (!cf?.orderId || !cf?.paymentSessionId) {
         toast.error("Payment gateway not ready. Please try again.")
         setLoading(false)
         return
       }
       setLoading(false)
 
-      let profile = {}
-      try {
-        const pr = await deliveryAPI.getProfile()
-        profile = pr?.data?.data?.profile || pr?.data?.profile || {}
-      } catch (_) {}
-
-      const phone = (profile?.phone || "").replace(/\D/g, "").slice(-10)
-      const email = profile?.email || ""
-      const name = profile?.name || ""
-
-      const companyName = await getCompanyNameAsync()
       setProcessing(true)
-      await initRazorpayPayment({
-        key: rp.key,
-        amount: rp.amount,
-        currency: rp.currency || "INR",
-        order_id: rp.orderId,
-        name: companyName,
-        description: `Cash limit deposit - ?${amt.toFixed(2)}`,
-        prefill: { name, email, contact: phone },
-        handler: async (res) => {
+      await initCashfreePayment({
+        paymentSessionId: cf.paymentSessionId,
+        mode: cf.mode,
+        handler: async () => {
           try {
             const verifyRes = await deliveryAPI.verifyDepositPayment({
-              razorpay_order_id: res.razorpay_order_id,
-              razorpay_payment_id: res.razorpay_payment_id,
-              razorpay_signature: res.razorpay_signature,
-              amount: amt
+              cashfreeOrderId: cf.orderId
             })
             if (verifyRes?.data?.success) {
               toast.success(`Deposit of ?${amt.toFixed(2)} successful. Available limit updated.`)
@@ -87,7 +68,7 @@ export default function DepositPopup({ onSuccess, cashInHand = 0 }) {
           }
         },
         onError: (e) => {
-          toast.error(e?.description || "Payment failed")
+          toast.error(e?.message || "Payment failed")
           setProcessing(false)
         },
         onClose: () => setProcessing(false)

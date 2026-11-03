@@ -19,13 +19,11 @@ import { FoodTransaction } from '../models/foodTransaction.model.js';
 import { FoodSupportTicket } from '../../user/models/supportTicket.model.js';
 import { config } from '../../../../config/env.js';
 import {
-    createRazorpayOrder,
-    verifyPaymentSignature,
-    getRazorpayKeyId,
-    isRazorpayConfigured,
-    initiateRazorpayRefund,
-    fetchRazorpayPayment
-} from '../helpers/razorpay.helper.js';
+    createCashfreeOrder,
+    confirmCashfreeOrder,
+    isCashfreeConfigured,
+    initiateCashfreeRefund,
+} from '../helpers/cashfree.helper.js';
 import { getIO, rooms } from '../../../../config/socket.js';
 import { addOrderJob } from '../../../../queues/producers/order.producer.js';
 import { fetchPolyline } from '../utils/googleMaps.js';
@@ -245,16 +243,17 @@ async function applyCancellationRefund(order, { cancelledBy = 'system', refundAm
   }
 
   if (paymentMethod === 'razorpay') {
-    const paymentId = String(order.payment?.razorpay?.paymentId || '').trim();
-    if (!paymentId) {
+    // Field name predates Cashfree: payment.razorpay.orderId holds the Cashfree order id.
+    const cfOrderId = String(order.payment?.razorpay?.orderId || '').trim();
+    if (!cfOrderId) {
       order.payment.refund = {
         status: 'failed',
         amount,
       };
-      return { attempted: true, processed: false, reason: 'missing_razorpay_payment_id', method: paymentMethod };
+      return { attempted: true, processed: false, reason: 'missing_cashfree_order_id', method: paymentMethod };
     }
 
-    const refundResult = await initiateRazorpayRefund(paymentId, amount);
+    const refundResult = await initiateCashfreeRefund(cfOrderId, amount, `refund_${order._id}`);
     if (refundResult.success) {
       order.payment.status = 'refunded';
       order.payment.refund = {
@@ -273,7 +272,7 @@ async function applyCancellationRefund(order, { cancelledBy = 'system', refundAm
     return {
       attempted: true,
       processed: false,
-      reason: refundResult.error || 'razorpay_refund_failed',
+      reason: refundResult.error || 'cashfree_refund_failed',
       method: paymentMethod,
     };
   }
@@ -602,26 +601,29 @@ export async function createOrder(userId, dto) {
       platformProfit: Number(platformProfit) || 0,
     });
 
-    let razorpayPayload = null;
+    let cashfreePayload = null;
 
-    if (paymentMethod === "razorpay" && isRazorpayConfigured()) {
-      const amountPaise = Math.round((normalizedPricing.total || 0) * 100);
-      if (amountPaise < 100)
+    if (paymentMethod === "razorpay" && isCashfreeConfigured()) {
+      if (Math.round((normalizedPricing.total || 0) * 100) < 100)
         throw new ValidationError("Amount too low for online payment");
       try {
-        const rzOrder = await createRazorpayOrder(amountPaise, "INR", order._id.toString());
-        razorpayPayload = {
-          key: getRazorpayKeyId(),
-          orderId: rzOrder.id,
-          amount: rzOrder.amount,
-          currency: rzOrder.currency || "INR",
-        };
-        payment.razorpay = { orderId: rzOrder.id, paymentId: "", signature: "" };
+        const customer = await FoodUser.findById(order.userId).select("name email phone").lean();
+        cashfreePayload = await createCashfreeOrder({
+          orderId: `order_${order._id}_${Date.now().toString(36)}`,
+          amount: normalizedPricing.total,
+          purpose: "order",
+          ref: order._id.toString(),
+          customerId: `user_${order.userId}`,
+          customerPhone: customer?.phone,
+          customerName: customer?.name,
+          customerEmail: customer?.email,
+        });
+        payment.razorpay = { orderId: cashfreePayload.orderId, paymentId: "", signature: "" };
         payment.status = "created";
         // Update order payment state before saving
         order.payment = payment;
       } catch (err) {
-        logger.error(`Razorpay order creation failed: ${err.message}`);
+        logger.error(`Cashfree order creation failed: ${err.message}`);
         throw new ValidationError(err?.message || "Payment gateway error");
       }
     }
@@ -711,7 +713,7 @@ export async function createOrder(userId, dto) {
     }
 
     const saved = normalizeOrderForClient(order);
-    return { order: saved, razorpay: razorpayPayload };
+    return { order: saved, cashfree: cashfreePayload };
   } catch (err) {
     logger.error(`Order placement error: ${err.message}`, { stack: err.stack, userId, dto });
     if (err instanceof ValidationError || err instanceof ForbiddenError || err instanceof NotFoundError) {
@@ -735,33 +737,38 @@ export async function verifyPayment(userId, dto) {
   if (order.payment.status === "paid")
     return { order: normalizeOrderForClient(order), payment: order.payment };
 
-  if (String(dto.razorpayOrderId) !== String(order.payment?.razorpay?.orderId || "")) {
-    throw new ValidationError("Payment verification failed");
-  }
+  return completeOnlineOrderPayment(order, { byRole: "USER", byId: userId });
+}
 
-  const valid = verifyPaymentSignature(
-    dto.razorpayOrderId,
-    dto.razorpayPaymentId,
-    dto.razorpaySignature,
-  );
-  if (!valid) throw new ValidationError("Payment verification failed");
+/** Webhook path: the customer paid but their browser never reported back. */
+export async function settleCashfreeOrderPayment(cfOrderId) {
+  const order = await FoodOrder.findOne({ "payment.razorpay.orderId": String(cfOrderId) });
+  if (!order) return null;
+  if (order.payment.status === "paid") return order;
+  await completeOnlineOrderPayment(order, { byRole: "SYSTEM", byId: null });
+  return order;
+}
 
-  // Cross-check the actual captured payment against the order: correct Razorpay
-  // order linkage, an acceptable status, and the exact amount in paise.
+async function completeOnlineOrderPayment(order, actor) {
+  const cfOrderId = String(order.payment?.razorpay?.orderId || "");
+  if (!cfOrderId) throw new ValidationError("Payment verification failed");
+
+  // Cashfree's own record decides: correct order, paid, and the exact amount.
   // Fail closed — the webhook remains the recovery path for transient errors.
-  let rzPayment;
+  let confirmed;
   try {
-    rzPayment = await fetchRazorpayPayment(dto.razorpayPaymentId);
+    confirmed = await confirmCashfreeOrder(cfOrderId);
   } catch (err) {
-    logger.error(`Razorpay payment fetch failed for order ${order._id}: ${err?.message || err}`);
+    logger.error(`Cashfree order fetch failed for order ${order._id}: ${err?.message || err}`);
     throw new ValidationError("Payment verification failed. Please retry in a moment.");
   }
+  if (!confirmed.paid) throw new ValidationError("Payment is not complete yet");
+
   const expectedPaise = Math.round((Number(order.pricing?.total) || 0) * 100);
-  const paidPaise = Number(rzPayment?.amount);
-  const rzStatus = String(rzPayment?.status || "").toLowerCase();
+  const paidPaise = Math.round(confirmed.amount * 100);
   if (
-    String(rzPayment?.order_id || "") !== String(order.payment.razorpay.orderId) ||
-    !["captured", "authorized"].includes(rzStatus) ||
+    confirmed.purpose !== "order" ||
+    confirmed.ref !== order._id.toString() ||
     !Number.isFinite(paidPaise) ||
     paidPaise !== expectedPaise
   ) {
@@ -771,18 +778,28 @@ export async function verifyPayment(userId, dto) {
       byId: null,
       from: order.orderStatus,
       to: order.orderStatus,
-      note: `Payment rejected: amount/order mismatch (paid ${paidPaise} paise, expected ${expectedPaise} paise, status ${rzStatus})`,
+      note: `Payment rejected: amount/order mismatch (paid ${paidPaise} paise, expected ${expectedPaise} paise)`,
     });
     await order.save();
     logger.error(
-      `Payment amount mismatch for order ${order._id}: paid ${paidPaise} paise, expected ${expectedPaise} paise, rz order ${rzPayment?.order_id}, status ${rzStatus}`,
+      `Payment amount mismatch for order ${order._id}: paid ${paidPaise} paise, expected ${expectedPaise} paise, cf order ${cfOrderId}`,
     );
     throw new ValidationError("Payment verification failed");
   }
 
+  // The browser and the webhook can both arrive here. Only the one that flips the status
+  // goes on to confirm the order, so the restaurant is notified once.
+  const claim = await FoodOrder.updateOne(
+    { _id: order._id, "payment.status": { $ne: "paid" } },
+    { $set: { "payment.status": "paid", "payment.razorpay.paymentId": confirmed.paymentId } },
+  );
+  if (claim.modifiedCount === 0) {
+    const current = await FoodOrder.findById(order._id);
+    return { order: normalizeOrderForClient(current), payment: current.payment };
+  }
+
   order.payment.status = "paid";
-  order.payment.razorpay.paymentId = dto.razorpayPaymentId;
-  order.payment.razorpay.signature = dto.razorpaySignature;
+  order.payment.razorpay.paymentId = confirmed.paymentId;
   
   const from = order.orderStatus;
   const acceptanceWindowSeconds = await getOrderAcceptanceWindowSeconds();
@@ -791,8 +808,8 @@ export async function verifyPayment(userId, dto) {
   order.acceptanceDeadlineAt = buildAcceptanceDeadline(new Date(), acceptanceWindowSeconds);
 
   pushStatusHistory(order, {
-    byRole: "USER",
-    byId: userId,
+    byRole: actor.byRole,
+    byId: actor.byId,
     from: from,
     to: "created",
     note: "Payment verified, order confirmed",
@@ -827,14 +844,13 @@ export async function verifyPayment(userId, dto) {
     logger.error(`[CRITICAL] Initial transaction failed for order ${order._id}: ${err.message}`);
   }
 
-  await incrementCouponUsageForOrder(order, userId);
+  await incrementCouponUsageForOrder(order, order.userId);
 
   await foodTransactionService.updateTransactionStatus(order._id, 'captured', {
     status: 'captured',
-    razorpayPaymentId: dto.razorpayPaymentId,
-    razorpaySignature: dto.razorpaySignature,
-    recordedByRole: "USER",
-    recordedById: new mongoose.Types.ObjectId(userId)
+    razorpayPaymentId: confirmed.paymentId,
+    recordedByRole: actor.byRole,
+    recordedById: actor.byId ? new mongoose.Types.ObjectId(actor.byId) : undefined
   });
 
   // After online payment is verified, now notify restaurant about the new order.
@@ -866,6 +882,18 @@ export async function abandonOnlinePaymentOrder(userId, orderId) {
   if (!order) throw new NotFoundError("Order not found");
   if (String(order.orderStatus || "").toLowerCase() !== "pending_payment") {
     throw new ValidationError("Order is not awaiting payment");
+  }
+
+  // Closing the payment window doesn't prove the customer didn't pay. Check first, so a
+  // paid order is confirmed instead of deleted.
+  const cfOrderId = order.payment?.razorpay?.orderId;
+  if (cfOrderId) {
+    const confirmed = await confirmCashfreeOrder(cfOrderId).catch(() => null);
+    if (!confirmed) throw new ValidationError("Could not confirm the payment state. Please try again.");
+    if (confirmed.paid) {
+      await completeOnlineOrderPayment(order, { byRole: "USER", byId: userId });
+      return { deleted: false, paid: true, orderId: order._id.toString() };
+    }
   }
 
   const deleted = await deletePendingPaymentOrder(order);

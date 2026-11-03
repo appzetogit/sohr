@@ -143,10 +143,7 @@ export function validateCreateOrderDto(body) {
 
 export function validateVerifyPaymentDto(body) {
     const schema = z.object({
-        orderId: z.string().min(1, 'Order id required'),
-        razorpayOrderId: z.string().min(1, 'Razorpay order id required'),
-        razorpayPaymentId: z.string().min(1, 'Razorpay payment id required'),
-        razorpaySignature: z.string().min(1, 'Razorpay signature required')
+        orderId: z.string().min(1, 'Order id required')
     });
     const result = schema.safeParse(body);
     if (!result.success) {

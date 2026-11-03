@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { Refund } from './models/refund.model.js';
 import { Payment } from './models/payment.model.js';
 import { creditWallet } from './wallet.service.js';
-import { getRazorpayInstance, isRazorpayConfigured } from '../../modules/food/orders/helpers/razorpay.helper.js';
+import { initiateCashfreeRefund, isCashfreeConfigured } from '../../modules/food/orders/helpers/cashfree.helper.js';
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -68,7 +68,7 @@ export async function initiateRefund({ paymentId, orderId, userId, amount, reaso
 }
 
 /**
- * Process a gateway refund (Razorpay) for a pending refund record.
+ * Process a gateway refund (Cashfree) for a pending refund record.
  */
 export async function processGatewayRefund(refundId) {
     const refund = await Refund.findById(refundId);
@@ -78,15 +78,12 @@ export async function processGatewayRefund(refundId) {
     const payment = await Payment.findById(refund.paymentId);
     if (!payment) throw new Error('Payment not found');
 
-    if (payment.gateway === 'razorpay' && payment.gatewayPaymentId && isRazorpayConfigured()) {
+    if (payment.gatewayOrderId && isCashfreeConfigured()) {
         try {
-            const instance = getRazorpayInstance();
-            const rzRefund = await instance.payments.refund(payment.gatewayPaymentId, {
-                amount: Math.round(refund.amount * 100), // paise
-                speed: 'normal'
-            });
+            const result = await initiateCashfreeRefund(payment.gatewayOrderId, refund.amount, `refund_${refund._id}`);
+            if (!result.success) throw new Error(result.error);
 
-            refund.gatewayRefundId = rzRefund.id;
+            refund.gatewayRefundId = result.refundId;
             refund.status = 'processed';
             refund.processedAt = new Date();
             await refund.save();
@@ -94,7 +91,7 @@ export async function processGatewayRefund(refundId) {
             payment.status = 'refunded';
             await payment.save();
 
-            logger.info(`Gateway refund processed: ${refundId} gatewayRefundId=${rzRefund.id}`);
+            logger.info(`Gateway refund processed: ${refundId} gatewayRefundId=${result.refundId}`);
         } catch (err) {
             refund.status = 'failed';
             refund.metadata = { error: err.message };

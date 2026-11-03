@@ -271,10 +271,7 @@ export const verifyCashDepositPaymentController = async (req, res, next) => {
     try {
         const deliveryPartnerId = req.user?.userId;
         const data = await verifyDeliveryCashDepositPayment(deliveryPartnerId, {
-            razorpayOrderId: req.body?.razorpay_order_id,
-            razorpayPaymentId: req.body?.razorpay_payment_id,
-            razorpaySignature: req.body?.razorpay_signature,
-            amount: req.body?.amount
+            cashfreeOrderId: req.body?.cashfreeOrderId
         });
         return sendResponse(res, 200, 'Cash deposit verified successfully', data);
     } catch (error) {

@@ -25,7 +25,7 @@ import { clearModuleAuth } from "@food/utils/auth"
 import { logoutRestaurantSession } from "@food/utils/restaurantLogout"
 import { ImageSourcePicker } from "@food/components/ImageSourcePicker"
 import { resolveMediaUrl } from "@food/utils/common"
-import { initRazorpayPayment } from "@food/utils/razorpay"
+import { initCashfreePayment } from "@food/utils/cashfree"
 import { getCompanyNameAsync, loadBusinessSettings, getModuleLogoUrl } from "@food/utils/businessSettings"
 import RestaurantOnboardingShell from "@food/components/restaurant/RestaurantOnboardingShell"
 import {
@@ -548,7 +548,7 @@ export default function RestaurantOnboarding() {
     razorpayOrderId: "",
     razorpayPaymentId: "",
     razorpaySignature: "",
-    paymentType: "razorpay",
+    paymentType: "cashfree",
     errors: [],
   })
   const [subscriptionSettings, setSubscriptionSettings] = useState(null)
@@ -1701,7 +1701,7 @@ export default function RestaurantOnboarding() {
     if (requiresOnboardingFee) {
       formData.append('onboardingFeeAmount', String(step4State.onboardingFeeAmount || onboardingFeeTotal))
       formData.append('onboardingFeePaid', 'true')
-      formData.append('paymentType', step4State.paymentType || 'razorpay')
+      formData.append('paymentType', step4State.paymentType || 'cashfree')
       formData.append('razorpayOrderId', step4State.razorpayOrderId || '')
       formData.append('razorpayPaymentId', step4State.razorpayPaymentId || '')
       formData.append('razorpaySignature', step4State.razorpaySignature || '')
@@ -1740,39 +1740,26 @@ export default function RestaurantOnboarding() {
     try {
       const orderResponse = await restaurantAPI.createOnboardingFeeOrder(phone)
       const payload = orderResponse?.data?.data || orderResponse?.data || {}
-      const razorpay = payload?.razorpay
+      const cashfree = payload?.cashfree
       const feeTotal =
         Number(payload?.onboardingFeeTotal) ||
         Number(payload?.onboardingFeeAmount ?? onboardingFeeTotal) ||
         onboardingFeeTotal
 
-      if (!razorpay?.orderId || !razorpay?.key) {
+      if (!cashfree?.orderId || !cashfree?.paymentSessionId) {
         throw new Error("Failed to initialize payment gateway")
       }
 
-      const company = await getCompanyNameAsync()
-
-      await initRazorpayPayment({
-        key: razorpay.key,
-        amount: razorpay.amount,
-        currency: razorpay.currency || "INR",
-        order_id: razorpay.orderId,
-        name: company || companyName,
-        description: "Restaurant onboarding fee",
-        prefill: {
-          name: step1.ownerName || "",
-          email: (step1.ownerEmail || "").trim(),
-          contact: phone,
-        },
-        handler: (response) => {
+      await initCashfreePayment({
+        paymentSessionId: cashfree.paymentSessionId,
+        mode: cashfree.mode,
+        handler: () => {
           setStep4State((prev) => ({
             ...prev,
             onboardingFeePaid: true,
             onboardingFeeAmount: feeTotal,
-            razorpayOrderId: response.razorpay_order_id,
-            razorpayPaymentId: response.razorpay_payment_id,
-            razorpaySignature: response.razorpay_signature,
-            paymentType: "razorpay",
+            razorpayOrderId: cashfree.orderId,
+            paymentType: "cashfree",
           }))
           toast.success("Onboarding fee paid successfully")
         },

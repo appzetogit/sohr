@@ -181,7 +181,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [collectQrLink, setCollectQrLink] = useState(null);
-  // Razorpay UPI QR image (QR Codes API). Null when a payment link was issued instead.
+  // QR image from the server. Null for Cashfree payment links, which are drawn from the URL here.
   const [collectQrImage, setCollectQrImage] = useState(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   // Only a fully captured payment counts; the server refuses to complete anything else.

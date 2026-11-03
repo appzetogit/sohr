@@ -48,10 +48,17 @@ export const config = {
     deliveryDropOtpRequired: process.env.DELIVERY_DROP_OTP_REQUIRED !== 'false',
 
     // SMS India Hub
+    smsApiUrl: process.env.SMS_INDIA_HUB_API_URL || 'http://cloud.smsindiahub.in/api/mt/SendSMS',
     smsIndiaHubUsername: process.env.SMS_INDIA_HUB_USERNAME,
-    smsApiKey: process.env.SMS_INDIA_HUB_API_KEY,
+    smsIndiaHubPassword: process.env.SMS_INDIA_HUB_PASSWORD,
     smsSenderId: process.env.SMS_INDIA_HUB_SENDER_ID,
+    smsChannel: process.env.SMS_INDIA_HUB_CHANNEL,
+    smsRoute: process.env.SMS_INDIA_HUB_ROUTE,
+    smsPeId: process.env.SMS_INDIA_HUB_PE_ID,
     smsDltTemplateId: process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID,
+    smsDltTemplate: process.env.SMS_INDIA_HUB_DLT_TEMPLATE,
+    smsAppName: process.env.SMS_INDIA_HUB_APP_NAME,
+    smsPoweredBy: process.env.SMS_INDIA_HUB_POWERED_BY,
 
     // Rate limiting
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== 'false',
@@ -130,6 +137,10 @@ export const config = {
     razorpayKeyId: process.env.RAZORPAY_KEY_ID,
     razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
     razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET, // ✅ NEW
+
+    // Cashfree (fallback when no keys are saved on the admin Payment Gateway page)
+    cashfreeAppId: process.env.CASHFREE_APP_ID,
+    cashfreeSecretKey: process.env.CASHFREE_SECRET_KEY,
 
     // Email (SMTP) – for admin forgot password OTP etc.
     emailHost: process.env.EMAIL_HOST,

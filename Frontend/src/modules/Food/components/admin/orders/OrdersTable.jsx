@@ -732,7 +732,7 @@ export default function OrdersTable({
                                   }`}
                                 title={order.paymentType === "Wallet" || order.payment?.method === "wallet"
                                   ? "Process Wallet Refund (Add to user wallet)"
-                                  : "Process Refund via Razorpay"}
+                                  : "Process Refund via Cashfree"}
                               >
                                 <span className="text-sm">₹</span>
                                 <span>Refund</span>

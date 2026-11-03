@@ -14,7 +14,7 @@ const foodDeliveryCashDepositSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['cash', 'razorpay', 'upi', 'bank_transfer'],
+        enum: ['cash', 'razorpay', 'cashfree', 'upi', 'bank_transfer'],
         default: 'cash'
     },
     status: {
@@ -39,5 +39,10 @@ const foodDeliveryCashDepositSchema = new mongoose.Schema({
 });
 
 foodDeliveryCashDepositSchema.index({ createdAt: -1 });
+// One deposit per gateway order, so the app and the webhook can't both clear the same money.
+foodDeliveryCashDepositSchema.index(
+    { razorpayOrderId: 1 },
+    { unique: true, partialFilterExpression: { razorpayOrderId: { $gt: '' } } }
+);
 
 export const FoodDeliveryCashDeposit = mongoose.model('FoodDeliveryCashDeposit', foodDeliveryCashDepositSchema);

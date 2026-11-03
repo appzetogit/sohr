@@ -19,11 +19,10 @@ import {
 import { getRestaurantSubscriptionSettings } from '../../admin/services/admin.service.js';
 import { GST_RATE } from './subscriptionPlan.service.js';
 import {
-    createRazorpayOrder,
-    getRazorpayKeyId,
-    isRazorpayConfigured,
-    verifyPaymentSignature,
-} from '../../orders/helpers/razorpay.helper.js';
+    confirmCashfreeOrder,
+    createCashfreeOrder,
+    isCashfreeConfigured,
+} from '../../orders/helpers/cashfree.helper.js';
 
 const normalizeName = (value) =>
     String(value || '')
@@ -636,34 +635,23 @@ export const createRestaurantOnboardingFeeOrder = async ({ ownerPhone }) => {
         throw new ValidationError('Owner phone is required to create onboarding fee payment');
     }
 
-    const amountPaise = Math.round(total * 100);
-
-    if (!isRazorpayConfigured()) {
-        return {
-            onboardingFeeAmount: baseFee,
-            onboardingFeeGst: gstAmount,
-            onboardingFeeTotal: total,
-            razorpay: {
-                key: getRazorpayKeyId() || 'rzp_test_dummy',
-                orderId: `order_dev_onboarding_${last10}_${Date.now()}`,
-                amount: amountPaise,
-                currency: 'INR',
-            },
-        };
+    if (!isCashfreeConfigured()) {
+        throw new ValidationError('Online payment is not set up yet');
     }
 
-    const receipt = `onboarding_${last10}_${Date.now()}`;
-    const order = await createRazorpayOrder(amountPaise, 'INR', receipt);
+    const cashfree = await createCashfreeOrder({
+        orderId: `onboarding_${last10}_${Date.now().toString(36)}`,
+        amount: total,
+        purpose: 'onboarding',
+        ref: last10,
+        customerId: `owner_${last10}`,
+        customerPhone: last10,
+    });
     return {
         onboardingFeeAmount: baseFee,
         onboardingFeeGst: gstAmount,
         onboardingFeeTotal: total,
-        razorpay: {
-            key: getRazorpayKeyId(),
-            orderId: String(order.id),
-            amount: Number(order.amount) || amountPaise,
-            currency: order.currency || 'INR',
-        },
+        cashfree,
     };
 };
 
@@ -849,25 +837,32 @@ export const registerRestaurant = async (payload, files) => {
             throw new ValidationError('Onboarding fee amount does not match the configured fee');
         }
         const orderId = String(razorpayOrderId || '').trim();
-        const paymentId = String(razorpayPaymentId || '').trim();
-        const signature = String(razorpaySignature || '').trim();
-        if (!orderId || !paymentId || !signature) {
+        if (!orderId) {
             throw new ValidationError('Complete onboarding fee payment details are required');
         }
-        const verified = isRazorpayConfigured()
-            ? verifyPaymentSignature(orderId, paymentId, signature)
-            : true;
-        if (!verified) {
+        if (!isCashfreeConfigured()) {
+            throw new ValidationError('Online payment is not set up yet');
+        }
+        const confirmed = await confirmCashfreeOrder(orderId);
+        if (
+            !confirmed.paid ||
+            confirmed.purpose !== 'onboarding' ||
+            confirmed.ref !== normalizePhone(ownerPhone).last10 ||
+            Math.abs(confirmed.amount - requiredOnboardingFeeTotal) > 0.01
+        ) {
             throw new ValidationError('Onboarding fee payment verification failed');
+        }
+        // One payment pays for one registration.
+        if (await FoodRestaurant.exists({ onboardingFeePaymentOrderId: orderId })) {
+            throw new ValidationError('This onboarding fee payment was already used');
         }
         onboardingFeeFields = {
             onboardingFeePaid: true,
             onboardingFeeAmount: requiredOnboardingFeeTotal,
             onboardingFeePaidAt: new Date(),
-            onboardingFeePaymentMethod: paymentType || 'razorpay',
+            onboardingFeePaymentMethod: 'cashfree',
             onboardingFeePaymentOrderId: orderId,
-            onboardingFeePaymentId: paymentId,
-            onboardingFeePaymentSignature: signature,
+            onboardingFeePaymentId: confirmed.paymentId,
         };
     }
 

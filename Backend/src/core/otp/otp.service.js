@@ -5,6 +5,7 @@ import { config } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { RateLimitError } from '../auth/errors.js';
 import { evaluateOtpRateWindow } from './otp.rateWindow.js';
+import { buildOtpSmsUrl, findMissingSmsSettings } from './otp.smsRequest.js';
 
 const generateOtpCode = () => {
     const code = crypto.randomInt(1000, 9999);
@@ -18,28 +19,14 @@ const generateOtpCode = () => {
  */
 const sendSmsViaIndiaHub = async (phone, otp) => {
     try {
-        // Normalize phone: strip non-digits, ensure 91 country code prefix
-        const digits = String(phone || '').replace(/\D/g, '');
-        const msisdn = digits.startsWith('91') ? digits : `91${digits}`;
-
-        // EXACT DLT TEMPLATE provided by user:
-        // "Welcome to the ##var## powered by SMSINDIAHUB. Your OTP for registration is ##var##"
-        const message = `Welcome to the Switcheats powered by Appzeto.Your OTP for registration is ${otp}.BGADEC.`;
-
-        // SMS India Hub HTTP GET API — query param names are case-sensitive per SOP
-        const url = new URL('http://cloud.smsindiahub.in/vendorsms/pushsms.aspx');
-        url.searchParams.append('APIKey', config.smsApiKey);
-        url.searchParams.append('sid', config.smsSenderId);
-        url.searchParams.append('msisdn', msisdn);
-        url.searchParams.append('msg', message);
-        url.searchParams.append('gwid', '2');
-        url.searchParams.append('fl', '0');
-        if (config.smsIndiaHubUsername) {
-            url.searchParams.append('uname', config.smsIndiaHubUsername);
+        const missing = findMissingSmsSettings(config);
+        if (missing.length > 0) {
+            logger.error(`[SMS] OTP not sent to ${phone} — missing env: ${missing.join(', ')}`);
+            return;
         }
-        if (config.smsDltTemplateId) {
-            url.searchParams.append('DLT_TE_ID', config.smsDltTemplateId);
-        }
+
+        const url = buildOtpSmsUrl(config, phone, otp);
+        const msisdn = url.searchParams.get('number');
 
         logger.info(`[SMS] Sending OTP to ${msisdn} via SMS India Hub...`);
         const response = await fetch(url.toString());

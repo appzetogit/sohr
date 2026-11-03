@@ -14,7 +14,7 @@ import { useLocation as useUserLocation } from "@food/hooks/useLocation"
 import { useZone } from "@food/hooks/useZone"
 import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
-import { initRazorpayPayment } from "@food/utils/razorpay"
+import { initCashfreePayment } from "@food/utils/cashfree"
 import { toast } from "sonner"
 import { getCompanyNameAsync } from "@food/utils/businessSettings"
 import { getCachedFeeSettings, loadCorePublicAppConfig } from "@food/services/publicAppConfig"
@@ -2241,7 +2241,7 @@ export default function Cart() {
 
       debugLog("? Order created successfully:", orderResponse.data)
 
-      const { order, razorpay } = orderResponse.data.data
+      const { order, cashfree } = orderResponse.data.data
       const pendingOnlineOrderId = order?._id || order?.id || order?.orderMongoId || null
 
       const cleanupAbandonedOnlinePayment = async () => {
@@ -2275,60 +2275,24 @@ export default function Cart() {
         return
       }
 
-      if (!razorpay || !razorpay.orderId || !razorpay.key) {
-        debugError("? Razorpay initialization failed:", { razorpay, order })
-        throw new Error(razorpay ? "Razorpay payment gateway is not configured. Please contact support." : "Failed to initialize payment")
+      if (!cashfree || !cashfree.orderId || !cashfree.paymentSessionId) {
+        debugError("? Cashfree initialization failed:", { cashfree, order })
+        throw new Error("Online payment is not available right now. Please contact support.")
       }
 
-      debugLog("?? Razorpay order created:", {
-        orderId: razorpay.orderId,
-        amount: razorpay.amount,
-        currency: razorpay.currency,
-        keyPresent: !!razorpay.key
+      debugLog("?? Cashfree order created:", {
+        orderId: cashfree.orderId,
+        amount: cashfree.amount,
+        currency: cashfree.currency
       })
 
-      // Get user info for Razorpay prefill
-      const userInfo = userProfile || {}
-      const userPhone = recipientPhone || userInfo.phone || defaultAddress?.phone || ""
-      const userEmail = userInfo.email || ""
-      const userName = recipientName || userInfo.name || ""
-
-      // Format phone number (remove non-digits, take last 10 digits)
-      const formattedPhone = userPhone.replace(/\D/g, "").slice(-10)
-
-      debugLog("?? User info for payment:", {
-        name: userName,
-        email: userEmail,
-        phone: formattedPhone
-      })
-
-      // Get company name for Razorpay
-      const companyName = await getCompanyNameAsync()
-
-      // Initialize Razorpay payment
-      await initRazorpayPayment({
-        key: razorpay.key,
-        amount: razorpay.amount, // Already in paise from backend
-        currency: razorpay.currency || 'INR',
-        order_id: razorpay.orderId,
-        name: companyName,
-        description: `Order ${order._id || order.orderId} - ${RUPEE_SYMBOL}${(razorpay.amount / 100).toFixed(2)}`,
-        prefill: {
-          name: userName,
-          email: userEmail,
-          contact: formattedPhone
-        },
-        notes: {
-          orderId: order._id || order.orderId,
-          userId: userInfo.id || "",
-          restaurantId: restaurantId || "unknown"
-        },
-        handler: async (response) => {
+      // Initialize Cashfree payment
+      await initCashfreePayment({
+        paymentSessionId: cashfree.paymentSessionId,
+        mode: cashfree.mode,
+        handler: async () => {
           try {
-            debugLog("? Payment successful, verifying...", {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id
-            })
+            debugLog("? Payment finished, verifying...", { orderId: cashfree.orderId })
 
             // Verify payment with backend
             const verifyOrderId = order?._id || order?.id || order?.orderMongoId
@@ -2336,10 +2300,7 @@ export default function Cart() {
               throw new Error("Unable to verify payment: missing order id from create-order response")
             }
             const verifyResponse = await orderAPI.verifyPayment({
-              orderId: verifyOrderId,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpaySignature: response.razorpay_signature
+              orderId: verifyOrderId
             })
 
             debugLog("? Payment verification response:", verifyResponse.data)
@@ -2372,14 +2333,9 @@ export default function Cart() {
           }
         },
         onError: async (error) => {
-          debugError("? Razorpay payment error:", error)
-          // Don't show alert for user cancellation
-          if (error?.code !== 'PAYMENT_CANCELLED' && error?.message !== 'PAYMENT_CANCELLED') {
-            const errorMessage = error?.description || error?.message || "Payment failed. Please try again."
-            alert(errorMessage)
-          } else {
-            await cleanupAbandonedOnlinePayment()
-          }
+          debugError("? Cashfree payment error:", error)
+          alert(error?.message || "Payment failed. Please try again.")
+          await cleanupAbandonedOnlinePayment()
           setIsPlacingOrder(false)
         },
         onClose: async () => {
@@ -3227,7 +3183,7 @@ export default function Cart() {
                     <div>
                       <p className="text-lg font-semibold text-gray-900">
                         {selectedPaymentMethod === "razorpay"
-                          ? `Pay ${RUPEE_SYMBOL}${total.toFixed(2)} online (Razorpay)`
+                          ? `Pay ${RUPEE_SYMBOL}${total.toFixed(2)} online`
                           : selectedPaymentMethod === "wallet"
                             ? `Pay ${RUPEE_SYMBOL}${total.toFixed(2)} from Wallet`
                             : `Pay on delivery (COD)`}

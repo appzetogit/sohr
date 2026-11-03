@@ -1,13 +1,13 @@
 /**
- * Razorpay credentials editable from the admin panel (Payment Gateway page).
+ * Cashfree credentials editable from the admin panel (Payment Gateway page).
  *
- * - Secrets (key secret, webhook secret) are encrypted at rest with AES-256-GCM and
- *   never sent back to the browser; the admin only sees whether one is set.
+ * - The secret key is encrypted at rest with AES-256-GCM and never sent back to the
+ *   browser; the admin only sees whether one is set.
  * - Every process (API cluster, workers) keeps an in-memory copy that refreshes every
  *   30 s and immediately in the process that saved a change, so new keys apply without
- *   a restart. Code that needs keys reads them synchronously via getRazorpayCredentials().
- * - If nothing is saved in the panel, RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET /
- *   RAZORPAY_WEBHOOK_SECRET from the environment are used.
+ *   a restart. Code that needs keys reads them synchronously via getPaymentGatewayCredentials().
+ * - If nothing is saved in the panel, CASHFREE_APP_ID / CASHFREE_SECRET_KEY from the
+ *   environment are used.
  */
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
@@ -16,11 +16,10 @@ import { logger } from '../../utils/logger.js';
 
 const settingsSchema = new mongoose.Schema(
     {
-        key: { type: String, required: true, unique: true, default: 'razorpay' },
+        key: { type: String, required: true, unique: true, default: 'cashfree' },
         enabled: { type: Boolean, default: false },
-        keyId: { type: String, trim: true, default: '' },
-        keySecretEnc: { type: String, default: '' },
-        webhookSecretEnc: { type: String, default: '' },
+        appId: { type: String, trim: true, default: '' },
+        secretKeyEnc: { type: String, default: '' },
         updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodAdmin', default: null },
     },
     { collection: 'payment_gateway_settings', timestamps: true },
@@ -58,10 +57,9 @@ export function decryptSecret(stored) {
 
 const envCredentials = () => ({
     source: 'env',
-    enabled: Boolean(config.razorpayKeyId && config.razorpayKeySecret),
-    keyId: config.razorpayKeyId || '',
-    keySecret: config.razorpayKeySecret || '',
-    webhookSecret: config.razorpayWebhookSecret || '',
+    enabled: Boolean(config.cashfreeAppId && config.cashfreeSecretKey),
+    appId: config.cashfreeAppId || '',
+    secretKey: config.cashfreeSecretKey || '',
 });
 
 let cached = envCredentials();
@@ -70,17 +68,16 @@ let refreshTimer = null;
 export async function refreshPaymentGatewaySettings() {
     try {
         if (mongoose.connection.readyState !== 1) return cached;
-        const doc = await PaymentGatewaySettings.findOne({ key: 'razorpay' }).lean();
-        if (!doc || (!doc.keyId && !doc.keySecretEnc)) {
+        const doc = await PaymentGatewaySettings.findOne({ key: 'cashfree' }).lean();
+        if (!doc || (!doc.appId && !doc.secretKeyEnc)) {
             cached = envCredentials();
             return cached;
         }
         cached = {
             source: 'admin',
             enabled: Boolean(doc.enabled),
-            keyId: doc.keyId || '',
-            keySecret: decryptSecret(doc.keySecretEnc),
-            webhookSecret: decryptSecret(doc.webhookSecretEnc),
+            appId: doc.appId || '',
+            secretKey: decryptSecret(doc.secretKeyEnc),
         };
     } catch (err) {
         logger.error(`Payment gateway settings refresh failed: ${err?.message || err}`);
@@ -99,53 +96,51 @@ export function startPaymentGatewaySettingsSync() {
 }
 
 /**
- * Current Razorpay credentials. `enabled` is false when the admin switched Razorpay off
+ * Current Cashfree credentials. `enabled` is false when the admin switched Cashfree off
  * or no keys exist; callers must then refuse online payments.
  */
-export function getRazorpayCredentials() {
+export function getPaymentGatewayCredentials() {
     startPaymentGatewaySettingsSync();
     return cached;
 }
 
 // ---------------------------------------------------------------- admin API helpers
 
-export const RAZORPAY_KEY_ID_RE = /^rzp_(test|live)_[A-Za-z0-9]{8,32}$/;
+export const CASHFREE_APP_ID_RE = /^[A-Za-z0-9]{16,64}$/;
 
-const mask = (keyId) => (keyId ? `${keyId.slice(0, 13)}••••${keyId.slice(-4)}` : '');
+const mask = (appId) => (appId ? `${appId.slice(0, 8)}••••${appId.slice(-4)}` : '');
 
-/** What the admin panel may see: never the secrets themselves. */
+/** What the admin panel may see: never the secret itself. */
 export async function getPaymentGatewaySettingsForAdmin() {
-    const doc = await PaymentGatewaySettings.findOne({ key: 'razorpay' }).lean();
+    const doc = await PaymentGatewaySettings.findOne({ key: 'cashfree' }).lean();
     const env = envCredentials();
-    const keyId = doc?.keyId || '';
+    const appId = doc?.appId || '';
+    const activeAppId = appId || (env.enabled ? env.appId : '');
     return {
         enabled: Boolean(doc?.enabled),
-        keyId,
-        keyIdMasked: mask(keyId),
-        mode: keyId.startsWith('rzp_live_') ? 'live' : keyId.startsWith('rzp_test_') ? 'test' : '',
-        hasKeySecret: Boolean(doc?.keySecretEnc),
-        hasWebhookSecret: Boolean(doc?.webhookSecretEnc),
-        usingServerEnvKeys: !doc?.keyId && env.enabled,
+        appId,
+        appIdMasked: mask(activeAppId),
+        mode: activeAppId ? (activeAppId.startsWith('TEST') ? 'test' : 'live') : '',
+        hasSecretKey: Boolean(doc?.secretKeyEnc),
+        usingServerEnvKeys: !doc?.appId && env.enabled,
         updatedAt: doc?.updatedAt || null,
-        webhookUrl: `${String(process.env.FRONTEND_URL || 'https://sohr.in').replace(/\/$/, '')}/api/v1/payments/webhook/razorpay`,
-        webhookEvents: ['qr_code.credited', 'payment_link.paid', 'payment.captured', 'refund.processed'],
+        webhookUrl: `${String(process.env.FRONTEND_URL || 'https://sohr.in').replace(/\/$/, '')}/api/v1/payments/webhook/cashfree`,
     };
 }
 
 /**
- * Save from the admin panel. Blank secret fields keep the stored value, so the admin
+ * Save from the admin panel. A blank secret field keeps the stored value, so the admin
  * can change one thing without re-typing everything.
  */
-export async function savePaymentGatewaySettings({ enabled, keyId, keySecret, webhookSecret }, adminId) {
-    const doc = (await PaymentGatewaySettings.findOne({ key: 'razorpay' })) || new PaymentGatewaySettings({ key: 'razorpay' });
+export async function savePaymentGatewaySettings({ enabled, appId, secretKey }, adminId) {
+    const doc = (await PaymentGatewaySettings.findOne({ key: 'cashfree' })) || new PaymentGatewaySettings({ key: 'cashfree' });
 
-    if (keyId !== undefined) doc.keyId = String(keyId).trim();
-    if (keySecret) doc.keySecretEnc = encryptSecret(String(keySecret).trim());
-    if (webhookSecret) doc.webhookSecretEnc = encryptSecret(String(webhookSecret).trim());
+    if (appId !== undefined) doc.appId = String(appId).trim();
+    if (secretKey) doc.secretKeyEnc = encryptSecret(String(secretKey).trim());
     if (enabled !== undefined) doc.enabled = Boolean(enabled);
 
-    if (doc.enabled && (!doc.keyId || !doc.keySecretEnc)) {
-        const err = new Error('Enter the Key ID and Key Secret before turning Razorpay on');
+    if (doc.enabled && (!doc.appId || !doc.secretKeyEnc)) {
+        const err = new Error('Enter the App ID and Secret Key before turning Cashfree on');
         err.statusCode = 400;
         throw err;
     }

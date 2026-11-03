@@ -5,7 +5,7 @@ import { adminAPI } from "@food/api"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 
-const KEY_ID_RE = /^rzp_(test|live)_[A-Za-z0-9]{8,32}$/
+const APP_ID_RE = /^[A-Za-z0-9]{16,64}$/
 
 function SecretInput({ value, onChange, placeholder, saved }) {
   const [show, setShow] = useState(false)
@@ -32,16 +32,16 @@ function SecretInput({ value, onChange, placeholder, saved }) {
 }
 
 /**
- * Razorpay keys for collecting payment at the door (rider shows a UPI QR) and for
- * online payments in the app. Super admin only. Secrets are write-only: the page only
- * shows whether one is saved.
+ * Cashfree keys for collecting payment at the door (rider shows a QR) and for online
+ * payments in the app. Super admin only. Secrets are write-only: the page only shows
+ * whether one is saved.
  */
 export default function PaymentGateway() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [settings, setSettings] = useState(null)
-  const [form, setForm] = useState({ enabled: false, keyId: "", keySecret: "", webhookSecret: "" })
+  const [form, setForm] = useState({ enabled: false, appId: "", secretKey: "" })
   const [error, setError] = useState("")
 
   const load = async () => {
@@ -50,7 +50,7 @@ export default function PaymentGateway() {
       const res = await adminAPI.getPaymentGatewaySettings()
       const data = res?.data?.data || {}
       setSettings(data)
-      setForm({ enabled: Boolean(data.enabled), keyId: data.keyId || "", keySecret: "", webhookSecret: "" })
+      setForm({ enabled: Boolean(data.enabled), appId: data.appId || "", secretKey: "" })
     } catch (err) {
       setError(err?.response?.status === 403 ? "Only a super admin can manage payment settings." : "Could not load payment settings.")
     } finally {
@@ -62,25 +62,24 @@ export default function PaymentGateway() {
     load()
   }, [])
 
-  const keyIdError = form.keyId && !KEY_ID_RE.test(form.keyId) ? "Key ID starts with rzp_test_ or rzp_live_" : ""
-  const mode = form.keyId.startsWith("rzp_live_") ? "live" : form.keyId.startsWith("rzp_test_") ? "test" : ""
+  const appIdError = form.appId && !APP_ID_RE.test(form.appId) ? "App ID looks wrong. Copy it from Cashfree Dashboard → Developers → API Keys" : ""
+  const mode = !form.appId ? "" : form.appId.startsWith("TEST") ? "test" : "live"
 
   const save = async () => {
     setError("")
-    if (keyIdError) return setError(keyIdError)
-    if (form.enabled && (!form.keyId || (!form.keySecret && !settings?.hasKeySecret)))
-      return setError("Enter the Key ID and Key Secret before turning Razorpay on")
+    if (appIdError) return setError(appIdError)
+    if (form.enabled && (!form.appId || (!form.secretKey && !settings?.hasSecretKey)))
+      return setError("Enter the App ID and Secret Key before turning Cashfree on")
     setSaving(true)
     try {
       const res = await adminAPI.savePaymentGatewaySettings({
         enabled: form.enabled,
-        keyId: form.keyId,
-        ...(form.keySecret ? { keySecret: form.keySecret } : {}),
-        ...(form.webhookSecret ? { webhookSecret: form.webhookSecret } : {}),
+        appId: form.appId,
+        ...(form.secretKey ? { secretKey: form.secretKey } : {}),
       })
       const data = res?.data?.data || {}
       setSettings(data)
-      setForm({ enabled: Boolean(data.enabled), keyId: data.keyId || "", keySecret: "", webhookSecret: "" })
+      setForm({ enabled: Boolean(data.enabled), appId: data.appId || "", secretKey: "" })
       toast.success("Payment settings saved")
     } catch (err) {
       setError(err?.response?.data?.message || "Could not save")
@@ -91,14 +90,14 @@ export default function PaymentGateway() {
 
   const testConnection = async () => {
     setError("")
-    if (keyIdError) return setError(keyIdError)
+    if (appIdError) return setError(appIdError)
     setTesting(true)
     try {
       const res = await adminAPI.testPaymentGatewaySettings({
-        keyId: form.keyId,
-        ...(form.keySecret ? { keySecret: form.keySecret } : {}),
+        appId: form.appId,
+        ...(form.secretKey ? { secretKey: form.secretKey } : {}),
       })
-      toast.success(`Connected to Razorpay (${res?.data?.data?.mode || mode} mode)`)
+      toast.success(`Connected to Cashfree (${res?.data?.data?.mode || mode} mode)`)
     } catch (err) {
       toast.error(err?.response?.data?.message || "Connection failed")
     } finally {
@@ -127,8 +126,8 @@ export default function PaymentGateway() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Payment Gateway</h1>
           <p className="text-sm text-slate-600">
-            Razorpay keys used when a rider collects payment online at the door (UPI QR) and for online payments in
-            the app. Money goes straight to this Razorpay account.
+            Cashfree keys used when a rider collects payment online at the door (QR) and for online payments in
+            the app. Money goes straight to this Cashfree account.
           </p>
         </div>
       </div>
@@ -136,22 +135,22 @@ export default function PaymentGateway() {
       {settings && (
         <div
           className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm ${
-            settings.enabled ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+            settings.enabled || settings.usingServerEnvKeys ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
           }`}
         >
-          {settings.enabled ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-          {settings.enabled
-            ? `Online payments are ON (${settings.mode || "?"} mode, key ${settings.keyIdMasked}).`
-            : settings.usingServerEnvKeys
-              ? "Using keys from the server configuration. Save keys here to manage them from the panel."
-              : "Online payments are OFF. Riders can only collect cash."}
+          {settings.enabled || settings.usingServerEnvKeys ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+          {settings.enabled || settings.usingServerEnvKeys
+            ? settings.usingServerEnvKeys
+              ? `Using keys from the server configuration (${settings.mode} mode, app ID ${settings.appIdMasked}). Save keys here to manage them from the panel.`
+              : `Online payments are ON (${settings.mode || "?"} mode, app ID ${settings.appIdMasked}).`
+            : "Online payments are OFF. Riders can only collect cash."}
         </div>
       )}
 
       <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <label className="flex cursor-pointer items-center justify-between gap-4">
           <span>
-            <span className="block font-semibold text-slate-900">Enable Razorpay</span>
+            <span className="block font-semibold text-slate-900">Enable Cashfree</span>
             <span className="block text-xs text-slate-500">When off, riders see only the cash option.</span>
           </span>
           <input
@@ -163,15 +162,15 @@ export default function PaymentGateway() {
         </label>
 
         <div className="space-y-1.5">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Key ID</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">App ID</span>
           <Input
-            value={form.keyId}
-            onChange={(e) => setForm((f) => ({ ...f, keyId: e.target.value.trim() }))}
-            placeholder="rzp_live_xxxxxxxxxxxxxx"
-            className={`h-10 font-mono ${keyIdError ? "border-red-400" : ""}`}
+            value={form.appId}
+            onChange={(e) => setForm((f) => ({ ...f, appId: e.target.value.trim() }))}
+            placeholder="From Cashfree Dashboard → Developers → API Keys"
+            className={`h-10 font-mono ${appIdError ? "border-red-400" : ""}`}
           />
-          {keyIdError ? (
-            <span className="text-xs font-medium text-red-600">{keyIdError}</span>
+          {appIdError ? (
+            <span className="text-xs font-medium text-red-600">{appIdError}</span>
           ) : (
             mode && (
               <span className={`text-xs font-semibold ${mode === "live" ? "text-emerald-700" : "text-amber-700"}`}>
@@ -182,26 +181,13 @@ export default function PaymentGateway() {
         </div>
 
         <div className="space-y-1.5">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Key Secret</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Secret Key</span>
           <SecretInput
-            value={form.keySecret}
-            onChange={(v) => setForm((f) => ({ ...f, keySecret: v }))}
-            placeholder="From Razorpay Dashboard → Settings → API Keys"
-            saved={settings?.hasKeySecret}
+            value={form.secretKey}
+            onChange={(v) => setForm((f) => ({ ...f, secretKey: v }))}
+            placeholder="From Cashfree Dashboard → Developers → API Keys"
+            saved={settings?.hasSecretKey}
           />
-        </div>
-
-        <div className="space-y-1.5">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Webhook secret</span>
-          <SecretInput
-            value={form.webhookSecret}
-            onChange={(v) => setForm((f) => ({ ...f, webhookSecret: v }))}
-            placeholder="The secret you set when creating the webhook"
-            saved={settings?.hasWebhookSecret}
-          />
-          <span className="text-[11px] text-slate-500">
-            Lets Razorpay confirm payments even if the rider&apos;s app is closed.
-          </span>
         </div>
 
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
@@ -221,11 +207,11 @@ export default function PaymentGateway() {
       {settings?.webhookUrl && (
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm sm:p-6">
           <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-            <ShieldCheck className="h-4 w-4" /> Razorpay webhook setup
+            <ShieldCheck className="h-4 w-4" /> Cashfree webhook
           </h2>
           <p className="text-slate-600">
-            In Razorpay Dashboard → Settings → Webhooks, add a webhook with this URL, choose a secret, and paste the same
-            secret above.
+            Payments made here already tell Cashfree to report to this URL, and reports are checked using the Secret Key
+            above, so nothing more is needed. You can also add it under Cashfree Dashboard → Developers → Webhooks.
           </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 truncate rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs">
@@ -235,13 +221,6 @@ export default function PaymentGateway() {
               <Copy className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <p className="text-slate-600">
-            Events to tick: <span className="font-mono text-xs">{(settings.webhookEvents || []).join(", ")}</span>
-          </p>
-          <p className="text-xs text-slate-500">
-            For the UPI QR at the door, the QR Codes product must be enabled on your Razorpay account. If it isn&apos;t,
-            riders get a Razorpay payment link QR instead, which works the same way for the customer.
-          </p>
         </section>
       )}
     </div>

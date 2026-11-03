@@ -12,7 +12,7 @@ import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
 import { FIELD_ORDER, validateManualOrder, normalizeIndianMobile, isGoogleMapsLink } from "./manualOrderValidation"
 
-// "Collect at the door": the rider picks cash or online (Razorpay UPI QR) when delivering.
+// "Collect at the door": the rider picks cash or online (Cashfree QR) when delivering.
 const PAYMENT_METHODS = [
   { value: "cash", label: "Collect at the door (cash or online QR)" },
   { value: "razorpay", label: "Already paid online" },

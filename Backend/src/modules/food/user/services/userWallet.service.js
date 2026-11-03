@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { ValidationError } from '../../../../core/auth/errors.js';
 import { FoodUserWallet } from '../models/userWallet.model.js';
-import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature } from '../../orders/helpers/razorpay.helper.js';
+import { FoodUser } from '../../../../core/users/user.model.js';
+import { confirmCashfreeOrder, createCashfreeOrder, isCashfreeConfigured } from '../../orders/helpers/cashfree.helper.js';
 
 const ensureWallet = async (userId) => {
     const id = String(userId || '');
@@ -71,73 +72,71 @@ export const createWalletTopupOrder = async (userId, amountInr) => {
         throw new ValidationError('Maximum amount is 50,000');
     }
 
-    const amountPaise = Math.round(amount * 100);
-
-    if (!isRazorpayConfigured()) {
-        // Dev fallback: return a compatible shape without writing to DB.
-        const orderId = `order_dev_${Date.now()}`;
-        return {
-            razorpay: {
-                key: getRazorpayKeyId() || 'rzp_test_dummy',
-                orderId,
-                amount: amountPaise,
-                currency: 'INR'
-            }
-        };
+    if (!isCashfreeConfigured()) {
+        throw new ValidationError('Online payment is not set up yet');
     }
 
-    const receipt = `wallet_topup_${String(userId).slice(-8)}_${Date.now()}`;
-    const order = await createRazorpayOrder(amountPaise, 'INR', receipt);
+    const user = await FoodUser.findById(userId).select('name email phone').lean();
+    const cashfree = await createCashfreeOrder({
+        orderId: `wallet_${userId}_${Date.now().toString(36)}`,
+        amount,
+        purpose: 'wallet',
+        ref: String(userId),
+        customerId: `user_${userId}`,
+        customerPhone: user?.phone,
+        customerName: user?.name,
+        customerEmail: user?.email
+    });
 
-    return {
-        razorpay: {
-            key: getRazorpayKeyId(),
-            orderId: String(order.id),
-            amount: Number(order.amount) || amountPaise,
-            currency: order.currency || 'INR'
-        }
-    };
+    return { cashfree };
 };
 
 export const verifyWalletTopupPayment = async (userId, payload) => {
-    const orderId = String(payload?.razorpayOrderId || '').trim();
-    const paymentId = String(payload?.razorpayPaymentId || '').trim();
-    const signature = String(payload?.razorpaySignature || '').trim();
-    const amount = Number(payload?.amount);
+    const orderId = String(payload?.cashfreeOrderId || '').trim();
+    if (!orderId) throw new ValidationError('cashfreeOrderId is required');
+    return settleWalletTopup(userId, orderId);
+};
 
-    if (!orderId) throw new ValidationError('razorpayOrderId is required');
-    if (!paymentId) throw new ValidationError('razorpayPaymentId is required');
-    if (!signature) throw new ValidationError('razorpaySignature is required');
-    if (!Number.isFinite(amount) || amount <= 0) throw new ValidationError('amount is required');
-
-    const wallet = await ensureWallet(userId);
-    const existing = wallet.transactions.find((t) => String(t.razorpayOrderId || '') === orderId);
-    if (existing && String(existing.status).toLowerCase() === 'completed') {
-        return { wallet: await getUserWallet(userId) };
+/**
+ * Credits the wallet with what Cashfree says was paid, once per Cashfree order. Called by
+ * the client after checkout and by the webhook, in either order.
+ */
+export const settleWalletTopup = async (userId, orderId) => {
+    if (!isCashfreeConfigured()) {
+        throw new ValidationError('Online payment is not set up yet');
     }
-
-    // If razorpay not configured (dev), accept and credit wallet.
-    const ok = isRazorpayConfigured()
-        ? verifyPaymentSignature(orderId, paymentId, signature)
-        : true;
-    if (!ok) {
+    const confirmed = await confirmCashfreeOrder(orderId);
+    if (confirmed.purpose !== 'wallet' || confirmed.ref !== String(userId)) {
+        throw new ValidationError('Payment verification failed');
+    }
+    if (!confirmed.paid) {
+        throw new ValidationError('Payment is not complete yet');
+    }
+    if (!Number.isFinite(confirmed.amount) || confirmed.amount <= 0) {
         throw new ValidationError('Payment verification failed');
     }
 
-    // Store ONLY after payment is verified.
-    wallet.transactions.unshift({
-        type: 'addition',
-        amount,
-        status: 'Completed',
-        description: isRazorpayConfigured() ? 'Wallet top-up' : 'Wallet top-up (dev)',
-        metadata: { source: 'wallet_topup', mode: isRazorpayConfigured() ? 'razorpay' : 'dev' },
-        razorpayOrderId: orderId,
-        razorpayPaymentId: paymentId,
-        razorpaySignature: signature
-    });
-
-    wallet.balance = Number(wallet.balance || 0) + amount;
-    await wallet.save();
+    const wallet = await ensureWallet(userId);
+    await FoodUserWallet.updateOne(
+        { _id: wallet._id, 'transactions.razorpayOrderId': { $ne: orderId } },
+        {
+            $inc: { balance: confirmed.amount },
+            $push: {
+                transactions: {
+                    $each: [{
+                        type: 'addition',
+                        amount: confirmed.amount,
+                        status: 'Completed',
+                        description: 'Wallet top-up',
+                        metadata: { source: 'wallet_topup', mode: 'cashfree' },
+                        razorpayOrderId: orderId,
+                        razorpayPaymentId: confirmed.paymentId
+                    }],
+                    $position: 0
+                }
+            }
+        }
+    );
 
     return { wallet: await getUserWallet(userId) };
 };

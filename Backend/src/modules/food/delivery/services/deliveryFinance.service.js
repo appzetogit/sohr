@@ -8,7 +8,7 @@ import { FoodDeliveryWallet } from '../models/deliveryWallet.model.js';
 import { DeliveryBonusTransaction } from '../../admin/models/deliveryBonusTransaction.model.js';
 import { getDeliveryCashLimitSettings } from '../../admin/services/admin.service.js';
 import { ValidationError } from '../../../../core/auth/errors.js';
-import { createRazorpayOrder, getRazorpayKeyId, isRazorpayConfigured, verifyPaymentSignature, fetchRazorpayPayment } from '../../orders/helpers/razorpay.helper.js';
+import { confirmCashfreeOrder, createCashfreeOrder, isCashfreeConfigured } from '../../orders/helpers/cashfree.helper.js';
 import { logger } from '../../../../utils/logger.js';
 
 /**
@@ -270,117 +270,67 @@ export const createDeliveryCashDepositOrder = async (deliveryPartnerId, amountIn
         throw new ValidationError('Deposit amount cannot exceed cash in hand');
     }
 
-    const amountPaise = Math.round(amount * 100);
-    const receipt = `cash_deposit_${String(deliveryPartnerId).slice(-8)}_${Date.now()}`;
-
-    if (!isRazorpayConfigured()) {
-        return {
-            razorpay: {
-                key: getRazorpayKeyId() || 'rzp_test_dummy',
-                orderId: `order_dev_${Date.now()}`,
-                amount: amountPaise,
-                currency: 'INR'
-            }
-        };
+    if (!isCashfreeConfigured()) {
+        throw new ValidationError('Online payment is not set up yet');
     }
 
-    const order = await createRazorpayOrder(amountPaise, 'INR', receipt);
-    return {
-        razorpay: {
-            key: getRazorpayKeyId(),
-            orderId: String(order.id),
-            amount: Number(order.amount) || amountPaise,
-            currency: order.currency || 'INR'
-        }
-    };
+    const partner = await FoodDeliveryPartner.findById(deliveryPartnerId).select('name email phone').lean();
+    const cashfree = await createCashfreeOrder({
+        orderId: `deposit_${deliveryPartnerId}_${Date.now().toString(36)}`,
+        amount,
+        purpose: 'deposit',
+        ref: String(deliveryPartnerId),
+        customerId: `rider_${deliveryPartnerId}`,
+        customerPhone: partner?.phone,
+        customerName: partner?.name,
+        customerEmail: partner?.email
+    });
+    return { cashfree };
 };
 
 export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payload = {}) => {
-    const orderId = String(payload?.razorpayOrderId || '').trim();
-    const paymentId = String(payload?.razorpayPaymentId || '').trim();
-    const signature = String(payload?.razorpaySignature || '').trim();
-    const amount = Number(payload?.amount);
+    const orderId = String(payload?.cashfreeOrderId || '').trim();
+    if (!orderId) throw new ValidationError('cashfreeOrderId is required');
+    return settleDeliveryCashDeposit(deliveryPartnerId, orderId);
+};
 
-    if (!orderId) throw new ValidationError('razorpayOrderId is required');
-    if (!paymentId) throw new ValidationError('razorpayPaymentId is required');
-    if (!signature) throw new ValidationError('razorpaySignature is required');
-    if (!Number.isFinite(amount) || amount < 1) throw new ValidationError('amount is required');
-
-    const existing = await FoodDeliveryCashDeposit.findOne({
-        deliveryPartnerId,
-        $or: [
-            { razorpayPaymentId: paymentId },
-            { razorpayOrderId: orderId }
-        ]
-    }).lean();
-
-    if (existing?.status === 'Completed') {
-        return { deposit: existing, wallet: await getDeliveryPartnerWalletEnhanced(deliveryPartnerId) };
+/**
+ * Records a rider's cash deposit for what Cashfree says was paid, once per Cashfree order.
+ * Called by the app after checkout and by the webhook, in either order.
+ */
+export const settleDeliveryCashDeposit = async (deliveryPartnerId, orderId) => {
+    if (!isCashfreeConfigured()) {
+        throw new ValidationError('Online payment is not set up yet');
     }
-
-    const isValid = isRazorpayConfigured()
-        ? verifyPaymentSignature(orderId, paymentId, signature)
-        : true;
-
-    if (!isValid) {
+    const confirmed = await confirmCashfreeOrder(orderId);
+    if (confirmed.purpose !== 'deposit' || confirmed.ref !== String(deliveryPartnerId)) {
         throw new ValidationError('Payment verification failed');
     }
-
-    // The signature proves the payment belongs to this order — it says NOTHING about how
-    // much was paid. Trusting the client's `amount` let a rider pay Rs 1 and post
-    // amount: 5000, clearing Rs 5000 of cash-in-hand while pocketing the difference.
-    // Always settle on the amount Razorpay actually captured.
-    let settledAmount = amount;
-    if (isRazorpayConfigured()) {
-        const payment = await fetchRazorpayPayment(paymentId);
-
-        const capturedPaise = Number(payment?.amount);
-        if (!Number.isFinite(capturedPaise) || capturedPaise <= 0) {
-            throw new ValidationError('Could not confirm the paid amount with Razorpay');
-        }
-        if (!['captured', 'authorized'].includes(String(payment?.status || ''))) {
-            throw new ValidationError(`Payment is not captured (status: ${payment?.status || 'unknown'})`);
-        }
-        // Reject a payment belonging to a different Razorpay order.
-        if (payment?.order_id && String(payment.order_id) !== orderId) {
-            throw new ValidationError('Payment does not belong to this order');
-        }
-
-        settledAmount = Math.round((capturedPaise / 100) * 100) / 100;
-        if (Math.abs(settledAmount - amount) > 0.01) {
-            logger.warn(
-                `Cash deposit amount mismatch for partner ${deliveryPartnerId}: client claimed ${amount}, Razorpay captured ${settledAmount}. Using the captured amount.`
-            );
-        }
+    if (!confirmed.paid) {
+        throw new ValidationError('Payment is not complete yet');
+    }
+    if (!Number.isFinite(confirmed.amount) || confirmed.amount <= 0) {
+        throw new ValidationError('Could not confirm the paid amount with Cashfree');
     }
 
-    const wallet = await getDeliveryPartnerWalletEnhanced(deliveryPartnerId);
-    if (settledAmount > wallet.cashInHand) {
-        throw new ValidationError('Deposit amount cannot exceed cash in hand');
+    let deposit = await FoodDeliveryCashDeposit.findOne({ razorpayOrderId: orderId }).lean();
+    if (!deposit) {
+        try {
+            // The money has already moved, so it is recorded even if it now exceeds cash in
+            // hand: refusing here would take the rider's money and show nothing for it.
+            deposit = await FoodDeliveryCashDeposit.create({
+                deliveryPartnerId,
+                amount: confirmed.amount,
+                paymentMethod: 'cashfree',
+                status: 'Completed',
+                razorpayOrderId: orderId,
+                razorpayPaymentId: confirmed.paymentId
+            });
+        } catch (err) {
+            if (err?.code !== 11000) throw err;
+            deposit = await FoodDeliveryCashDeposit.findOne({ razorpayOrderId: orderId }).lean();
+        }
     }
-
-    const deposit = existing
-        ? await FoodDeliveryCashDeposit.findByIdAndUpdate(
-            existing._id,
-            {
-                $set: {
-                    amount,
-                    paymentMethod: isRazorpayConfigured() ? 'razorpay' : 'cash',
-                    status: 'Completed',
-                    razorpayOrderId: orderId,
-                    razorpayPaymentId: paymentId
-                }
-            },
-            { new: true }
-        )
-        : await FoodDeliveryCashDeposit.create({
-            deliveryPartnerId,
-            amount: settledAmount,
-            paymentMethod: isRazorpayConfigured() ? 'razorpay' : 'cash',
-            status: 'Completed',
-            razorpayOrderId: orderId,
-            razorpayPaymentId: paymentId
-        });
 
     return {
         deposit,

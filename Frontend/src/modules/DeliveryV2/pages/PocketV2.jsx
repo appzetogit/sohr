@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { deliveryAPI, restaurantAPI } from '@food/api';
 import { toast } from 'sonner';
 import { formatCurrency } from '@food/utils/currency';
-import { initRazorpayPayment } from "@food/utils/razorpay";
+import { initCashfreePayment } from "@food/utils/cashfree";
 import { getCompanyNameAsync } from "@food/utils/businessSettings";
 import useDeliveryBackNavigation from '../hooks/useDeliveryBackNavigation';
 
@@ -176,37 +176,21 @@ export const PocketV2 = () => {
       setDepositing(true);
       const orderRes = await deliveryAPI.createDepositOrder(amt);
       const data = orderRes?.data?.data;
-      const rp = data?.razorpay;
-      
-      if (!rp?.orderId) {
+      const cf = data?.cashfree;
+
+      if (!cf?.orderId || !cf?.paymentSessionId) {
         toast.error("Payment initialization failed");
         setDepositing(false);
         return;
       }
 
-      const profileRes = await deliveryAPI.getProfile();
-      const profile = profileRes?.data?.data?.profile || {};
-      const companyName = await getCompanyNameAsync();
-
-      await initRazorpayPayment({
-        key: rp.key,
-        amount: rp.amount,
-        currency: rp.currency || "INR",
-        order_id: rp.orderId,
-        name: companyName,
-        description: `Cash limit deposit - ₹${amt}`,
-        prefill: { 
-           name: profile.name, 
-           email: profile.email, 
-           contact: profile.phone 
-        },
-        handler: async (res) => {
+      await initCashfreePayment({
+        paymentSessionId: cf.paymentSessionId,
+        mode: cf.mode,
+        handler: async () => {
           try {
             const verifyRes = await deliveryAPI.verifyDepositPayment({
-              razorpay_order_id: res.razorpay_order_id,
-              razorpay_payment_id: res.razorpay_payment_id,
-              razorpay_signature: res.razorpay_signature,
-              amount: amt
+              cashfreeOrderId: cf.orderId
             });
             if (verifyRes?.data?.success) {
               toast.success("Deposit successful");

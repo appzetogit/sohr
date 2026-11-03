@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.SETTINGS_ENCRYPTION_KEY = 'unit-test-key-1';
-const { encryptSecret, decryptSecret, RAZORPAY_KEY_ID_RE } = await import('./paymentGatewaySettings.js');
+const { encryptSecret, decryptSecret, CASHFREE_APP_ID_RE } = await import('./paymentGatewaySettings.js');
 
 test('secrets round-trip and are never stored in plain text', () => {
     const secret = 'abcDEF123secretXYZ';
@@ -31,10 +31,9 @@ test('a tampered value or the wrong server key is rejected', () => {
     assert.equal(decryptSecret(stored), 'another-secret');
 });
 
-test('Razorpay key ids are recognised', () => {
-    assert.ok(RAZORPAY_KEY_ID_RE.test('rzp_test_AbCdEf1234567'));
-    assert.ok(RAZORPAY_KEY_ID_RE.test('rzp_live_AbCdEf1234567'));
-    assert.ok(!RAZORPAY_KEY_ID_RE.test('rzp_prod_AbCdEf1234567'));
-    assert.ok(!RAZORPAY_KEY_ID_RE.test('pk_test_123'));
-    assert.ok(!RAZORPAY_KEY_ID_RE.test('rzp_test_short'));
+test('Cashfree app ids are recognised', () => {
+    assert.ok(CASHFREE_APP_ID_RE.test('TEST1234567890abcdef1234567890abcd'));
+    assert.ok(CASHFREE_APP_ID_RE.test('1234567890abcdef1234567890abcd'));
+    assert.ok(!CASHFREE_APP_ID_RE.test('rzp_test_AbCdEf1234567'));
+    assert.ok(!CASHFREE_APP_ID_RE.test('TESTshort'));
 });
