@@ -47,6 +47,9 @@ export const config = {
     // who never see the code in an app).
     deliveryDropOtpRequired: process.env.DELIVERY_DROP_OTP_REQUIRED !== 'false',
 
+    // Fixed OTPs, e.g. for an app store reviewer: `phone:otp,phone:otp`
+    otpStaticNumbers: process.env.OTP_STATIC_NUMBERS,
+
     // SMS India Hub
     smsApiUrl: process.env.SMS_INDIA_HUB_API_URL || 'http://cloud.smsindiahub.in/api/mt/SendSMS',
     smsIndiaHubUsername: process.env.SMS_INDIA_HUB_USERNAME,

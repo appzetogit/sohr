@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger.js';
 import { RateLimitError } from '../auth/errors.js';
 import { evaluateOtpRateWindow } from './otp.rateWindow.js';
 import { buildOtpSmsUrl, findMissingSmsSettings } from './otp.smsRequest.js';
+import { getStaticOtp } from './otp.staticOtp.js';
 
 const generateOtpCode = () => {
     const code = crypto.randomInt(1000, 9999);
@@ -82,10 +83,15 @@ export const createOrUpdateOtp = async (phone) => {
         existing.requestCount = decision.requestCount;
     }
 
+    const staticOtp = getStaticOtp(phone, config.otpStaticNumbers);
+
     let otp;
     if (config.useDefaultOtp) {
         otp = '1234';
         logger.info(`Default OTP mode enabled – OTP is ${otp} for phone ${phone}`);
+    } else if (staticOtp) {
+        otp = staticOtp;
+        logger.info(`Static OTP used for phone ${phone}; no SMS sent`);
     } else {
         otp = generateOtpCode();
     }
@@ -124,8 +130,8 @@ export const createOrUpdateOtp = async (phone) => {
         });
     }
 
-    // Only send SMS if not in default OTP mode
-    if (!config.useDefaultOtp) {
+    // Only send SMS if not in default OTP mode and the number has no static OTP
+    if (!config.useDefaultOtp && !staticOtp) {
         await sendSmsViaIndiaHub(phone, otp);
     }
 
