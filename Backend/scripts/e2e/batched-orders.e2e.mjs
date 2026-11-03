@@ -473,67 +473,67 @@ test('payment gateway settings: super admin only, validated, secrets never retur
   assert.equal(empty.status, 200, JSON.stringify(empty.json));
   assert.equal(empty.data.enabled, false);
 
-  const badId = await call('PUT', '/food/admin/payment-gateway', { token: state.adminToken, body: { keyId: 'pk_live_123' } });
+  const badId = await call('PUT', '/food/admin/payment-gateway', { token: state.adminToken, body: { appId: 'pk_live_123' } });
   assert.equal(badId.status, 400);
   const noSecret = await call('PUT', '/food/admin/payment-gateway', {
     token: state.adminToken,
-    body: { enabled: true, keyId: 'rzp_test_E2eKeyId12345' },
+    body: { enabled: true, appId: 'TESTE2eAppId1234567890' },
   });
   assert.equal(noSecret.status, 400);
-  assert.match(noSecret.json.message, /Key Secret/);
+  assert.match(noSecret.json.message, /Secret Key/);
 
   const secret = 'e2eSecretValue1234567890';
   const saved = await call('PUT', '/food/admin/payment-gateway', {
     token: state.adminToken,
-    body: { enabled: true, keyId: 'rzp_test_E2eKeyId12345', keySecret: secret, webhookSecret: 'e2e-webhook-secret' },
+    body: { enabled: true, appId: 'TESTE2eAppId1234567890', secretKey: secret },
   });
   assert.equal(saved.status, 200, JSON.stringify(saved.json));
   assert.equal(saved.data.mode, 'test');
-  assert.equal(saved.data.hasKeySecret, true);
-  assert.equal(saved.data.hasWebhookSecret, true);
+  assert.equal(saved.data.hasSecretKey, true);
   assert.ok(!JSON.stringify(saved.json).includes(secret), 'secret must never come back');
 
-  const doc = await PaymentGatewaySettings.findOne({ key: 'razorpay' }).lean();
-  assert.ok(doc.keySecretEnc.startsWith('v1:'));
-  assert.ok(!doc.keySecretEnc.includes(secret), 'stored encrypted');
+  const doc = await PaymentGatewaySettings.findOne({ key: 'cashfree' }).lean();
+  assert.ok(doc.secretKeyEnc.startsWith('v1:'));
+  assert.ok(!doc.secretKeyEnc.includes(secret), 'stored encrypted');
 
   // Saving again with a blank secret keeps the stored one.
   const keep = await call('PUT', '/food/admin/payment-gateway', { token: state.adminToken, body: { enabled: true } });
   assert.equal(keep.status, 200);
-  assert.equal((await PaymentGatewaySettings.findOne({ key: 'razorpay' }).lean()).keySecretEnc, doc.keySecretEnc);
+  assert.equal((await PaymentGatewaySettings.findOne({ key: 'cashfree' }).lean()).secretKeyEnc, doc.secretKeyEnc);
 
   // Riders can't read it.
   const rider = await call('GET', '/food/admin/payment-gateway', { token: state.riders.ravi.token });
   assert.ok([401, 403].includes(rider.status), `rider got ${rider.status}`);
 
-  // Test connection with made-up keys: Razorpay rejects them with a readable message.
+  // Test connection with made-up keys: Cashfree rejects them with a readable message.
   const test = await call('POST', '/food/admin/payment-gateway/test', {
     token: state.adminToken,
-    body: { keyId: 'rzp_test_E2eKeyId12345', keySecret: secret },
+    body: { appId: 'TESTE2eAppId1234567890', secretKey: secret },
   });
   assert.equal(test.status, 400, JSON.stringify(test.json));
-  assert.match(test.json.message, /Razorpay said/);
+  assert.match(test.json.message, /Cashfree said/);
 });
 
 test('webhook rejects bad signatures and accepts correctly signed collection events', async () => {
   const crypto = await import('node:crypto');
-  const body = JSON.stringify({ event: 'qr_code.credited', payload: { qr_code: { entity: { id: 'qr_unknown_e2e' } } } });
+  const body = JSON.stringify({ type: 'PAYMENT_LINK_EVENT', data: { link_id: 'link_unknown_e2e' } });
+  const timestamp = String(Date.now());
   const send = (signature) =>
-    fetch(`${API}/payments/webhook/razorpay`, {
+    fetch(`${API}/payments/webhook/cashfree`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-razorpay-signature': signature },
+      headers: { 'Content-Type': 'application/json', 'x-webhook-signature': signature, 'x-webhook-timestamp': timestamp },
       body,
     });
 
-  const bad = await send('0'.repeat(64));
+  const bad = await send('A'.repeat(44));
   assert.equal(bad.status, 400);
 
   // Settings refresh every 30 s in other processes; the API that saved them is current.
-  const good = await send(crypto.createHmac('sha256', 'e2e-webhook-secret').update(body).digest('hex'));
+  const good = await send(crypto.createHmac('sha256', 'e2eSecretValue1234567890').update(`${timestamp}${body}`).digest('base64'));
   assert.equal(good.status, 200, await good.text());
 });
 
-test('online collection fails clearly when Razorpay is switched off', async () => {
+test('online collection fails clearly when Cashfree is switched off', async () => {
   await call('PUT', '/food/admin/payment-gateway', { token: state.adminToken, body: { enabled: false } });
   const created = await call('POST', '/food/admin/orders/manual', {
     token: state.adminToken,
