@@ -181,7 +181,7 @@ const OtpModal = ({ order, onVerified, onClose }) => {
 const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [collectQrLink, setCollectQrLink] = useState(null);
-  // QR image from the server. Null for Cashfree payment links, which are drawn from the URL here.
+  // QR image from the server: a Cashfree UPI QR, or a payment link's QR.
   const [collectQrImage, setCollectQrImage] = useState(null);
   const [isGeneratingQr, setIsGeneratingQr] = useState(false);
   // Only a fully captured payment counts; the server refuses to complete anything else.
@@ -268,7 +268,7 @@ const PaymentModal = ({ order, otpString, onComplete, onClose }) => {
       });
       const data = res?.data?.data || res?.data || {};
       const link = data.shortUrl || null;
-      const image = data.kind === 'upi_qr' ? data.imageUrl : null;
+      const image = data.imageUrl || null;
       if (link || image) {
         setCollectQrLink(link);
         setCollectQrImage(image);

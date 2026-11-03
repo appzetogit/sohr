@@ -37,11 +37,11 @@ The server **won't complete** a delivery whose online payment isn't confirmed, s
 | Finish | `PATCH /food/delivery/orders/:orderId/complete` with body `{}` | `{ order }` |
 
 **`collect/qr` responses**
-- **`kind: "upi_qr"`:** `imageUrl` is a ready-made UPI QR image hosted by Razorpay. Show it with `Image.network`.
-- **`kind: "payment_link"`:** the Razorpay account has no QR Codes product, so you get a payment link (`shortUrl`). Draw it as a QR in the app (package `qr_flutter`). The customer scans it, it opens Razorpay's page, and they pay by UPI or card.
+- **`kind: "upi_qr"`:** `imageUrl` is a Cashfree UPI QR as a `data:image/png;base64,...` string. Decode it and show it with `Image.memory`; `Image.network` will not load it.
+- **`kind: "payment_link"`:** Cashfree couldn't create a UPI QR, so `imageUrl` is a QR for the payment link (`shortUrl`), in the same format. The customer scans it, it opens Cashfree's page, and they pay.
 - **Repeat calls:** calling it again for the same order **reuses** the open QR (no duplicates). A QR is valid for **30 minutes**.
 
-**Payment status:** poll `payment-status` every **4 s** while the QR is on screen, and stop as soon as `payment.status == "paid"`. Razorpay also confirms payments to the server directly, so a payment made while the app was closed still counts. Only `"paid"` means paid; never treat `authorized` or `partially_paid` as paid.
+**Payment status:** poll `payment-status` every **4 s** while the QR is on screen, and stop as soon as `payment.status == "paid"`. Cashfree also confirms payments to the server directly, so a payment made while the app was closed still counts. Only `"paid"` means paid; never treat `authorized` or `partially_paid` as paid.
 
 **Switching from online to cash:** the customer can change their mind. Calling `collect/cash` after a QR was shown **closes the QR**, so they can't pay twice. If they had **already paid** online, `collect/cash` returns 400 "Order is already paid". Then just complete.
 

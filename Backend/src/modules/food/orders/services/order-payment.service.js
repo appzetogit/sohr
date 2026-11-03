@@ -9,9 +9,13 @@ import {
 import { logger } from '../../../../utils/logger.js';
 import {
   cancelPaymentLink,
+  confirmCashfreeOrder,
+  createCollectUpiQr,
   createPaymentLink,
   fetchPaymentLink,
+  getPaymentLinkQrImage,
   isCashfreeConfigured,
+  terminateCashfreeOrder,
 } from '../helpers/cashfree.helper.js';
 import * as foodTransactionService from './foodTransaction.service.js';
 import {
@@ -25,7 +29,7 @@ const QR_VALID_MINUTES = 30;
 const toPaise = (rupees) => Math.round(Number(rupees || 0) * 100);
 
 /**
- * Ask Cashfree whether the customer has paid the collection payment link for this
+ * Ask Cashfree whether the customer has paid the collection QR / payment link for this
  * order, and record it. Only a full, captured payment for the expected amount counts:
  * partially paid or merely authorised money must not release the food.
  */
@@ -42,9 +46,10 @@ export async function syncRazorpayQrPayment(orderDoc) {
   if (payment.method !== 'razorpay_qr') return payment;
   if (payment.status === 'paid') return payment;
 
+  const qrId = payment?.qr?.qrId;
   const paymentLinkId = payment?.qr?.paymentLinkId;
-  if (!paymentLinkId) {
-    logger.warn(`[QrSync] No payment link for order ${orderId}`);
+  if (!qrId && !paymentLinkId) {
+    logger.warn(`[QrSync] No QR or payment link for order ${orderId}`);
     return payment;
   }
   if (!isCashfreeConfigured()) {
@@ -58,16 +63,28 @@ export async function syncRazorpayQrPayment(orderDoc) {
   let qrStatus = payment?.qr?.status || 'created';
 
   try {
-    const link = await fetchPaymentLink(paymentLinkId);
-    const linkStatus = String(link?.link_status || '').toUpperCase();
-    qrStatus = linkStatus.toLowerCase() || qrStatus;
-    isPaid = linkStatus === 'PAID' && toPaise(link?.link_amount_paid) >= expectedPaise;
-    isFailed = ['EXPIRED', 'CANCELLED'].includes(linkStatus);
-    if (linkStatus === 'PAID' && !isPaid) {
-      logger.warn(`[QrSync] Order ${orderId} link is paid below ${expectedPaise} paise — not settling.`);
-    }
-    if (linkStatus === 'PARTIALLY_PAID') {
-      logger.warn(`[QrSync] Order ${orderId} link is partially paid — not settling.`);
+    if (qrId) {
+      const confirmed = await confirmCashfreeOrder(qrId);
+      const qrOrderStatus = String(confirmed.status || '').toUpperCase();
+      qrStatus = qrOrderStatus.toLowerCase() || qrStatus;
+      const isThisOrder = confirmed.purpose === 'collect' && confirmed.ref === String(orderId);
+      isPaid = confirmed.paid && isThisOrder && toPaise(confirmed.amount) >= expectedPaise;
+      isFailed = ['EXPIRED', 'TERMINATED', 'TERMINATION_REQUESTED'].includes(qrOrderStatus);
+      if (confirmed.paid && !isPaid) {
+        logger.warn(`[QrSync] Order ${orderId}: QR ${qrId} paid but failed the amount/order check — not settling.`);
+      }
+    } else {
+      const link = await fetchPaymentLink(paymentLinkId);
+      const linkStatus = String(link?.link_status || '').toUpperCase();
+      qrStatus = linkStatus.toLowerCase() || qrStatus;
+      isPaid = linkStatus === 'PAID' && toPaise(link?.link_amount_paid) >= expectedPaise;
+      isFailed = ['EXPIRED', 'CANCELLED'].includes(linkStatus);
+      if (linkStatus === 'PAID' && !isPaid) {
+        logger.warn(`[QrSync] Order ${orderId} link is paid below ${expectedPaise} paise — not settling.`);
+      }
+      if (linkStatus === 'PARTIALLY_PAID') {
+        logger.warn(`[QrSync] Order ${orderId} link is partially paid — not settling.`);
+      }
     }
   } catch (error) {
     logger.error(`[QrSync] Cashfree lookup failed for order ${orderId}: ${error?.message || error}`);
@@ -90,7 +107,7 @@ export async function syncRazorpayQrPayment(orderDoc) {
     try {
       await foodTransactionService.updateTransactionStatus(orderId, 'cod_collect_qr_paid', {
         recordedByRole: 'SYSTEM',
-        note: `Collected online via Cashfree (${paymentLinkId})`,
+        note: `Collected online via Cashfree (${qrId || paymentLinkId})`,
       });
     } catch (err) {
       logger.warn(`[QrSync] ledger note failed for ${orderId}: ${err?.message || err}`);
@@ -102,9 +119,10 @@ export async function syncRazorpayQrPayment(orderDoc) {
 }
 
 /**
- * Online collection at the door. Creates a Cashfree payment link for the exact amount due
- * (paid straight into the admin's Cashfree account), which the rider app shows as a QR.
- * Re-uses a still-open link for the same amount instead of creating duplicates.
+ * Online collection at the door. Creates a Cashfree UPI QR for the exact amount due (paid
+ * straight into the admin's Cashfree account). If the account can't create one, falls back
+ * to a Cashfree payment link. Re-uses a still-open QR for the same amount instead of
+ * creating duplicates.
  */
 export async function createCollectQr(
   orderId,
@@ -141,19 +159,19 @@ export async function createCollectQr(
     throw new ValidationError('Online payment is not set up yet. Ask the admin to add Cashfree keys, or collect cash.');
   }
 
-  // Re-use an open link for the same amount.
+  // Re-use an open QR / link for the same amount.
   const existing = payment.qr || {};
   const stillOpen =
     method === 'razorpay_qr' &&
-    existing.paymentLinkId &&
+    (existing.qrId || existing.paymentLinkId) &&
     toPaise(payment.amountDue) === toPaise(amountDue) &&
     (!existing.expiresAt || new Date(existing.expiresAt).getTime() > Date.now() + 60_000) &&
-    !['closed', 'expired', 'cancelled', 'failed'].includes(String(existing.status || '').toLowerCase());
+    !['closed', 'expired', 'cancelled', 'failed', 'terminated', 'termination_requested'].includes(String(existing.status || '').toLowerCase());
   if (stillOpen) {
     return {
-      kind: 'payment_link',
+      kind: existing.qrId ? 'upi_qr' : 'payment_link',
       shortUrl: existing.shortUrl || null,
-      imageUrl: null, // the rider app renders the link as a QR itself
+      imageUrl: existing.imageUrl || null,
       amount: amountDue,
       expiresAt: existing.expiresAt || null,
     };
@@ -163,32 +181,57 @@ export async function createCollectQr(
   const displayId = order.order_id || order.orderId || order._id.toString();
   const expiresAt = new Date(Date.now() + QR_VALID_MINUTES * 60 * 1000);
 
-  let link;
+  const customerName = customerInfo.name || order.customerName || user.name || 'Customer';
+  const customerEmail = customerInfo.email || user.email;
+  const customerPhone = customerInfo.phone || order.customerPhone || user.phone;
+
+  let qrFields;
+  let kind;
   try {
-    link = await createPaymentLink({
-      linkId: `collect_${order._id}_${Date.now().toString(36)}`,
-      amount: amountDue,
-      description: `SOHR order ${displayId}`,
-      orderId: displayId,
+    const qr = await createCollectUpiQr({
       orderMongoId: order._id.toString(),
+      amount: amountDue,
       expiresAt,
-      customerName: customerInfo.name || order.customerName || user.name || 'Customer',
-      customerEmail: customerInfo.email || user.email,
-      customerPhone: customerInfo.phone || order.customerPhone || user.phone,
+      customerName,
+      customerEmail,
+      customerPhone,
     });
-  } catch (linkError) {
-    const reason = linkError?.message || 'unknown error';
-    logger.error(`[CollectQr] Cashfree refused the payment link for ${order._id}: ${reason}`);
-    throw new ValidationError(`Cashfree could not create the payment (${reason}). Collect cash or ask the admin to check the Cashfree keys.`);
+    kind = 'upi_qr';
+    qrFields = {
+      qrId: qr.orderId,
+      imageUrl: qr.imageUrl,
+      status: 'active',
+      expiresAt,
+    };
+  } catch (qrError) {
+    logger.warn(`[CollectQr] UPI QR not available (${qrError?.message || qrError}); using a payment link`);
+    let link;
+    try {
+      link = await createPaymentLink({
+        linkId: `collect_${order._id}_${Date.now().toString(36)}`,
+        amount: amountDue,
+        description: `SOHR order ${displayId}`,
+        orderId: displayId,
+        orderMongoId: order._id.toString(),
+        expiresAt,
+        customerName,
+        customerEmail,
+        customerPhone,
+      });
+    } catch (linkError) {
+      const reason = linkError?.message || 'unknown error';
+      logger.error(`[CollectQr] Cashfree refused both QR and payment link for ${order._id}: ${reason}`);
+      throw new ValidationError(`Cashfree could not create the payment (${reason}). Collect cash or ask the admin to check the Cashfree keys.`);
+    }
+    kind = 'payment_link';
+    qrFields = {
+      paymentLinkId: link.link_id,
+      shortUrl: link.link_url,
+      imageUrl: getPaymentLinkQrImage(link),
+      status: String(link.link_status || 'active').toLowerCase(),
+      expiresAt,
+    };
   }
-  const kind = 'payment_link';
-  const qrFields = {
-    paymentLinkId: link.link_id,
-    shortUrl: link.link_url,
-    imageUrl: null, // the rider app renders the link as a QR itself
-    status: String(link.link_status || 'active').toLowerCase(),
-    expiresAt,
-  };
 
   // CRITICAL: use upsert so this works even if FoodTransaction was never created at order placement
   await FoodTransaction.updateOne(
@@ -248,7 +291,7 @@ export async function createCollectQr(
     await foodTransactionService.updateTransactionStatus(order._id, 'cod_collect_qr_created', {
       recordedByRole: 'DELIVERY_PARTNER',
       recordedById: deliveryPartnerId,
-      note: 'Payment link created for collection',
+      note: kind === 'upi_qr' ? 'UPI QR created for collection' : 'Payment link created for collection',
     });
   } catch (err) {
     logger.warn(`[CollectQr] ledger note failed: ${err?.message || err}`);
@@ -258,7 +301,7 @@ export async function createCollectQr(
     orderMongoId: order._id.toString(),
     orderId: displayId,
     deliveryPartnerId,
-    qrId: null,
+    qrId: qrFields.qrId || null,
     paymentLinkId: qrFields.paymentLinkId || null,
     amountDue,
   });
@@ -337,7 +380,7 @@ export async function switchToCash(orderId, deliveryPartnerId) {
   // first, a customer who has already scanned and paid the QR still looks unpaid here, so
   // the rider collects cash as well — the customer pays twice and the QR payment is left
   // unattributed. Pull the real state from Cashfree before deciding.
-  if (order.payment?.qr?.paymentLinkId) {
+  if (order.payment?.qr?.paymentLinkId || order.payment?.qr?.qrId) {
     try {
       await syncRazorpayQrPayment(await FoodOrder.findOne(query));
       order = await FoodOrder.findOne(query).lean();
@@ -356,7 +399,7 @@ export async function switchToCash(orderId, deliveryPartnerId) {
   }
 
   // Stop the customer paying online as well once the rider takes cash.
-  await cancelPaymentLink(order.payment?.qr?.paymentLinkId);
+  await Promise.all([terminateCashfreeOrder(order.payment?.qr?.qrId), cancelPaymentLink(order.payment?.qr?.paymentLinkId)]);
 
   // Reset payment method to cash on BOTH records. Updating only the transaction left
   // FoodOrder.payment as razorpay_qr/pending_qr, so completeDelivery never flipped it to

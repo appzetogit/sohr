@@ -35,6 +35,14 @@ export const handleCashfreeWebhook = async (req, res) => {
                 if (!order) {
                     logger.error(`Cashfree Webhook: PAID but no order found for ${cfOrderId}. Needs a manual refund.`);
                 }
+            } else if (confirmed?.purpose === 'collect') {
+                const order = await FoodOrder.findOne({ 'payment.qr.qrId': cfOrderId });
+                if (order) {
+                    const result = await syncRazorpayQrPayment(order);
+                    logger.info(`Cashfree Webhook [${type}]: order ${order.order_id || order._id} collection status = ${result?.status}`);
+                } else {
+                    logger.warn(`Cashfree Webhook [${type}]: no order for QR ${cfOrderId}`);
+                }
             } else if (confirmed?.purpose === 'wallet') {
                 await settleWalletTopup(confirmed.ref, cfOrderId);
             } else if (confirmed?.purpose === 'deposit') {

@@ -61,7 +61,7 @@ const lastTenDigits = (phone) => String(phone || '').replace(/\D/g, '').slice(-1
  * webhook and verification can tell who and what the money is for without trusting the
  * client. Ids may only use letters, numbers, `_` and `-`.
  */
-export async function createCashfreeOrder({ orderId, amount, purpose, ref, customerId, customerPhone, customerName, customerEmail }) {
+export async function createCashfreeOrder({ orderId, amount, purpose, ref, customerId, customerPhone, customerName, customerEmail, expiresAt }) {
     if (!isCashfreeConfigured()) throw new ValidationError('Online payment is not set up yet');
     const phone = lastTenDigits(customerPhone);
     if (phone.length !== 10) throw new ValidationError('A 10-digit phone number is required for online payment');
@@ -79,6 +79,7 @@ export async function createCashfreeOrder({ orderId, amount, purpose, ref, custo
                 ...(customerEmail ? { customer_email: String(customerEmail) } : {}),
             },
             order_tags: { purpose: String(purpose), ref: String(ref) },
+            ...(expiresAt ? { order_expiry_time: expiresAt.toISOString() } : {}),
             ...(url ? { order_meta: { notify_url: url } } : {}),
         },
     });
@@ -117,9 +118,57 @@ export async function confirmCashfreeOrder(orderId) {
     };
 }
 
+const toPngDataUrl = (value) => {
+    const image = String(value || '');
+    if (!image) return null;
+    return image.startsWith('data:') ? image : `data:image/png;base64,${image}`;
+};
+
 /**
- * Hosted payment link for collecting at the door. The rider app renders `link_url` as a
- * QR that the customer scans.
+ * UPI QR for exactly this amount, paid straight into the admin's Cashfree account. Any UPI
+ * app can scan it. Callers fall back to a payment link if the account can't create one.
+ */
+export async function createCollectUpiQr({ orderMongoId, amount, expiresAt, customerPhone, customerName, customerEmail }) {
+    const id = String(orderMongoId);
+    const order = await createCashfreeOrder({
+        orderId: `collect_${id}_${Date.now().toString(36)}`,
+        amount,
+        purpose: 'collect',
+        ref: id,
+        customerId: `collect_${id}`,
+        customerPhone,
+        customerName,
+        customerEmail,
+        expiresAt,
+    });
+    const payment = await callCashfree('/orders/sessions', {
+        method: 'POST',
+        body: {
+            payment_session_id: order.paymentSessionId,
+            payment_method: { upi: { channel: 'qrcode' } },
+        },
+    });
+    const imageUrl = toPngDataUrl(payment?.data?.payload?.qrcode);
+    if (!imageUrl) throw new Error('Cashfree returned no QR image');
+    return { orderId: order.orderId, imageUrl };
+}
+
+/** Stop an unpaid order being paid (rider switched to cash, or a replaced QR). */
+export async function terminateCashfreeOrder(orderId) {
+    if (!orderId || !isCashfreeConfigured()) return null;
+    try {
+        return await callCashfree(`/orders/${encodeURIComponent(String(orderId))}`, {
+            method: 'PATCH',
+            body: { order_status: 'TERMINATED' },
+        });
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Hosted payment link for collecting at the door, used when a UPI QR can't be created.
+ * Cashfree returns it with a QR image that opens the link.
  */
 export function createPaymentLink({ linkId, amount, description, orderId, orderMongoId, customerName, customerEmail, customerPhone, expiresAt }) {
     if (!isCashfreeConfigured()) return Promise.reject(new Error('Cashfree not configured'));
@@ -145,6 +194,8 @@ export function createPaymentLink({ linkId, amount, description, orderId, orderM
         },
     });
 }
+
+export const getPaymentLinkQrImage = (link) => toPngDataUrl(link?.link_qrcode);
 
 export function fetchPaymentLink(linkId) {
     return callCashfree(`/links/${encodeURIComponent(String(linkId))}`);
