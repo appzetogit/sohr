@@ -10,6 +10,7 @@ import {
 import { APP_CONFIG } from "../config/constants"; // Adjust path if needed
 import apiClient, { restaurantAPI } from "../services/api";
 import SohrHome from "./SohrHome";
+import { LEGAL } from "./legalInfo";
 
 // --- Animation Variants for Cinematic Reveals ---
 const textReveal = {
@@ -45,8 +46,8 @@ export default function LandingPage() {
   const [isRestaurantOpen, setIsRestaurantOpen] = useState(false);
   const [isDeliveryOpen, setIsDeliveryOpen] = useState(false);
   const [supportContact, setSupportContact] = useState({
-    email: "support@sohr.in",
-    mobile: "1-800-123-4567"
+    email: "",
+    mobile: LEGAL.phone
   });
   const [leadForm, setLeadForm] = useState({
     ownerName: "",
@@ -68,8 +69,8 @@ export default function LandingPage() {
         const data = response?.data?.data || response?.data;
         if (data && (data.email || data.mobile)) {
           setSupportContact({
-            email: data.email || "support@sohr.in",
-            mobile: data.mobile || "1-800-123-4567"
+            email: data.email || "",
+            mobile: data.mobile || LEGAL.phone
           });
         }
       } catch (err) {
