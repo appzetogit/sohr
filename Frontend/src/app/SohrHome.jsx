@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { GOLD_TEXT, SERIF, HINDI, Ornament, RotatingSeal } from "./sohrBrand";
+import { LEGAL, LEGAL_PAGES } from "./legalInfo";
 import {
   ArrowRight, Leaf, ShieldCheck, ChefHat, Crown, Truck, Clock,
   MapPin, Mountain, Store, Bike, Home, Mail, Phone, Soup,
@@ -296,32 +297,33 @@ export default function SohrHome({ onAbout, onRestaurant, onDelivery, supportCon
               </div>
             </div>
             <p className="mt-5 text-sm text-[#A8987A] font-light leading-relaxed max-w-sm">
-              Pure vegetarian food made by Master Chef Vyas Ji. Innovated from Tapovan, Rishikesh, and delivered across India.
+              Pure vegetarian food made by Master Chef Vyas Ji. Rooted in Tapovan, Rishikesh, cooked and delivered in {LEGAL.city}.
             </p>
           </div>
 
           <div className="flex flex-col gap-3 text-sm">
             <h4 className="text-xs font-semibold tracking-[0.25em] uppercase text-[#E0B45A] mb-1">Company</h4>
-            <a href="/food/user/profile/about" className="text-[#BFB091] hover:text-[#FBE7A6] transition-colors">About Us</a>
-            <a href="/food/user/profile/help-content" className="text-[#BFB091] hover:text-[#FBE7A6] transition-colors">Support</a>
-            <a href="/food/user/profile/privacy" className="text-[#BFB091] hover:text-[#FBE7A6] transition-colors">Privacy Policy</a>
-            <a href="/food/user/profile/terms" className="text-[#BFB091] hover:text-[#FBE7A6] transition-colors">Terms of Service</a>
+            {LEGAL_PAGES.map((p) => (
+              <a key={p.path} href={p.path} className="text-[#BFB091] hover:text-[#FBE7A6] transition-colors">{p.title}</a>
+            ))}
           </div>
 
           <div className="flex flex-col gap-3 text-sm">
             <h4 className="text-xs font-semibold tracking-[0.25em] uppercase text-[#E0B45A] mb-1">Contact</h4>
-            <a href={`mailto:${supportContact.email}`} className="inline-flex items-center gap-2 text-[#BFB091] hover:text-[#FBE7A6] transition-colors break-all">
-              <Mail className="w-4 h-4 shrink-0" /> {supportContact.email}
-            </a>
-            <a href={`tel:${supportContact.mobile}`} className="inline-flex items-center gap-2 text-[#BFB091] hover:text-[#FBE7A6] transition-colors">
+            {supportContact.email && (
+              <a href={`mailto:${supportContact.email}`} className="inline-flex items-center gap-2 text-[#BFB091] hover:text-[#FBE7A6] transition-colors break-all">
+                <Mail className="w-4 h-4 shrink-0" /> {supportContact.email}
+              </a>
+            )}
+            <a href={`tel:${String(supportContact.mobile).replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-2 text-[#BFB091] hover:text-[#FBE7A6] transition-colors">
               <Phone className="w-4 h-4 shrink-0" /> {supportContact.mobile}
             </a>
-            <p className="inline-flex items-center gap-2 text-[#BFB091]"><MapPin className="w-4 h-4 shrink-0" /> Tapovan, Rishikesh</p>
+            <p className="inline-flex items-start gap-2 text-[#BFB091]"><MapPin className="w-4 h-4 shrink-0 mt-0.5" /> {LEGAL.address}</p>
           </div>
         </div>
 
         <div className="max-w-[1400px] mx-auto mt-14 pt-6 border-t border-[#C9973B]/15 text-xs text-[#7D6F55] text-center md:text-left">
-          © {year} SOHR by Vyas Ji. All rights reserved.
+          © {year} {LEGAL.legalName}. All rights reserved. {LEGAL.brand} is a brand of {LEGAL.legalName}.
         </div>
       </footer>
     </div>

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { AppShellSkeleton } from '@food/components/ui/loading-skeletons'
 import LandingPage from './LandingPage'
+import { LEGAL_PAGES } from './legalInfo'
 import { isFeatureEnabled, loadCorePublicAppConfig } from '@food/services/publicAppConfig'
 
 const NATIVE_LAST_ROUTE_KEY = 'native_last_route'
@@ -65,6 +66,7 @@ const RootEntryRoute = () => {
 
 const AdminRouter = lazy(() => import('../modules/Food/components/admin/AdminRouter'))
 const RiderAppDownload = lazy(() => import('./RiderAppDownload'))
+const LegalPage = lazy(() => import('./LegalPage'))
 
 const AppRoutes = () => {
   const location = useLocation()
@@ -93,6 +95,19 @@ const AppRoutes = () => {
     <Routes>
       {/* Root → Master Landing Page */}
       <Route path="/" element={<RootEntryRoute />} />
+
+      {/* Public: About, Contact and policy pages (payment partner and app store review) */}
+      {LEGAL_PAGES.map(({ path }) => (
+        <Route
+          key={path}
+          path={path}
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <LegalPage path={path} />
+            </Suspense>
+          }
+        />
+      ))}
 
       {/* Public: delivery partners download the rider app (APK) */}
       <Route
